@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Field Inspector">
+<meta name="theme-color" content="#1e3a5f">
+<link rel="manifest" href="manifest.json">
+<title>Field Inspector</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+/* =============================================
+   RESET & VARIABLES
+============================================= */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --navy:#1e3a5f;
+  --blue:#2e6da4;
+  --amber:#e67e22;
+  --amber2:#f39c12;
+  --bg:#f0f4f8;
+  --card:#fff;
+  --text:#2c3e50;
+  --muted:#7f8c8d;
+  --border:#dde3ea;
+  --red:#e74c3c;
+  --green:#27ae60;
+  --hdr:56px;
+}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+
+/* =============================================
+   APP SHELL
+============================================= */
+#app{height:100%;display:flex;flex-direction:column;overflow:hidden}
+
+.screen{display:none;flex:1;flex-direction:column;overflow:hidden}
+.screen.active{display:flex}
+
+/* =============================================
+   TOP HEADER
+============================================= */
+.hdr{
+  background:var(--navy);color:#fff;
+  min-height:var(--hdr);
+  display:flex;align-items:center;
+  padding:0 14px;gap:10px;flex-shrink:0;
+  position:sticky;top:0;z-index:100;
+  padding-top:env(safe-area-inset-top,0px);
+}
+.hdr h1{font-size:17px;font-weight:600;flex:1;line-height:1.2}
+.hdr .sub{font-size:12px;opacity:.75;line-height:1}
+.ico-btn{
+  width:36px;height:36px;border-radius:50%;border:none;
+  background:rgba(255,255,255,.18);color:#fff;font-size:20px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.ico-btn:active{opacity:.6}
+
+/* =============================================
+   CALENDAR SCREEN
+============================================= */
+.cal-nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;background:var(--navy);color:#fff;
+}
+.cal-nav h2{font-size:19px;font-weight:700}
+
+.cal-grid{padding:6px 10px 14px;background:var(--navy)}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;
+  color:rgba(255,255,255,.6);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px}
+.cal-cells{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+
+.cc{
+  aspect-ratio:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  border-radius:50%;font-size:15px;
+  color:rgba(255,255,255,.88);cursor:pointer;position:relative;transition:background .12s;
+}
+.cc:active{opacity:.6}
+.cc.other{color:rgba(255,255,255,.28)}
+.cc.today{background:rgba(255,255,255,.22);font-weight:700}
+.cc.sel{background:var(--amber);color:#fff;font-weight:700}
+.cc.has::after{
+  content:'';position:absolute;bottom:3px;
+  width:5px;height:5px;border-radius:50%;background:var(--amber2);
+}
+.cc.sel.has::after{background:#fff}
+
+.day-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px}
+.day-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}
+
+.ins-card{
+  background:var(--card);border-radius:12px;padding:14px;
+  margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  cursor:pointer;border-left:4px solid var(--blue);transition:transform .1s;
+}
+.ins-card:active{transform:scale(.98)}
+.ins-card h3{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.ins-card .meta{font-size:13px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.ins-card .pcnt{font-size:12px;background:var(--bg);color:var(--navy);padding:2px 8px;border-radius:10px;margin-top:6px;display:inline-block}
+
+.empty{text-align:center;padding:48px 20px;color:var(--muted)}
+.empty .ei{font-size:48px;margin-bottom:10px}
+.empty h3{font-size:16px;margin-bottom:6px}
+.empty p{font-size:13px}
+
+.fab{
+  position:fixed;bottom:24px;right:20px;
+  width:56px;height:56px;border-radius:50%;
+  background:var(--amber);color:#fff;border:none;
+  font-size:30px;cursor:pointer;
+  box-shadow:0 4px 18px rgba(0,0,0,.28);
+  display:flex;align-items:center;justify-content:center;z-index:50;
+  transition:transform .12s;
+}
+.fab:active{transform:scale(.9)}
+
+/* =============================================
+   FORM SCREEN
+============================================= */
+.form-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;padding-bottom:76px}
+
+.fsec{background:var(--card);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.fsec-hdr{
+  padding:10px 14px 8px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--navy);
+  border-bottom:1px solid var(--border);
+}
+.fld{padding:11px 14px;border-bottom:1px solid var(--border)}
+.fld:last-child{border-bottom:none}
+.fld label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:5px}
+.fld input,.fld textarea,.fld select{
+  width:100%;border:none;background:none;font-size:16px;
+  color:var(--text);font-family:inherit;outline:none;resize:none;
+}
+.fld textarea{min-height:72px}
+.frow{display:grid;grid-template-columns:1fr 1fr}
+.frow .fld:first-child{border-right:1px solid var(--border)}
+
+/* date badge in form */
+.date-badge{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:var(--bg);border-radius:8px;margin:0 14px 0;font-size:14px;font-weight:600;color:var(--navy);
+}
+
+/* buttons inside form */
+.scan-btn{
+  margin:10px 14px 0;padding:11px;background:var(--navy);
+  color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;
+  cursor:pointer;width:calc(100% - 28px);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.scan-btn:active{opacity:.8}
+
+.wx-btn{
+  margin:8px 14px 0;padding:10px;
+  background:#e8f4fd;color:var(--blue);border:1px solid #bee3f8;
+  border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;
+  width:calc(100% - 28px);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.wx-btn:active{opacity:.75}
+
+/* photo grid */
+.ph-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:8px}
+.ph-wrap{position:relative}
+.ph-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;display:block}
+.ph-del{
+  position:absolute;top:3px;right:3px;width:22px;height:22px;
+  border-radius:50%;background:rgba(0,0,0,.62);color:#fff;
+  border:none;font-size:11px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.ph-add{
+  aspect-ratio:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  border:2px dashed var(--border);border-radius:6px;
+  background:none;cursor:pointer;color:var(--muted);font-size:12px;gap:3px;
+}
+.ph-add .pi{font-size:22px}
+
+/* voice */
+.rec-ind{
+  display:none;align-items:center;gap:6px;
+  padding:6px 14px;background:#ffe8e8;border-radius:6px;
+  font-size:13px;color:var(--red);margin:0 14px 6px;
+}
+.rec-ind.on{display:flex}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.vc{display:flex;gap:8px;padding:8px 14px 12px}
+.btn-rec{
+  flex:1;padding:12px;border-radius:10px;border:none;
+  font-size:15px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+}
+.btn-rec.go{background:var(--navy);color:#fff}
+.btn-rec.stop{background:var(--red);color:#fff}
+
+/* save bar */
+.save-bar{
+  position:sticky;bottom:0;background:#fff;
+  border-top:1px solid var(--border);padding:10px 14px;
+  display:flex;gap:8px;
+}
+.btn-save{flex:1;padding:13px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer}
+.btn-del{padding:13px 18px;background:none;color:var(--red);border:1px solid var(--red);border-radius:10px;font-size:16px;font-weight:600;cursor:pointer}
+
+/* =============================================
+   DETAIL SCREEN
+============================================= */
+.det-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;padding-bottom:76px}
+.det-sec{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px}
+.det-sec h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--navy);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.det-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.df label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.df .dv{font-size:15px;color:var(--text);margin-top:2px;white-space:pre-wrap;line-height:1.5}
+.det-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.det-photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer}
+
+.copy-bar{
+  position:sticky;bottom:0;background:#fff;
+  border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;
+}
+.btn-copy{flex:1;padding:13px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.btn-edit{padding:13px 16px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+
+/* =============================================
+   LOADING, TOAST, MODAL
+============================================= */
+.overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.52);
+  z-index:1000;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:#fff;
+}
+.overlay.on{display:flex}
+.spin{width:40px;height:40px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ld-txt{font-size:15px}
+
+.toast{
+  position:fixed;bottom:84px;left:50%;
+  transform:translateX(-50%) translateY(16px);
+  background:#2c3e50;color:#fff;padding:9px 18px;
+  border-radius:20px;font-size:14px;opacity:0;
+  transition:all .28s;z-index:2000;white-space:nowrap;max-width:90vw;text-align:center;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.modal{display:none;position:fixed;inset:0;background:#000;z-index:3000;align-items:center;justify-content:center}
+.modal.on{display:flex}
+.modal img{max-width:100%;max-height:100%;object-fit:contain}
+.modal-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- LOADING OVERLAY -->
+<div class="overlay" id="ov">
+  <div class="spin"></div>
+  <div class="ld-txt" id="ovTxt">Processing…</div>
+</div>
+
+<!-- PHOTO MODAL -->
+<div class="modal" id="phModal">
+  <button class="modal-x" onclick="closeModal()">✕</button>
+  <img id="phModalImg" src="" alt="">
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ==================== CALENDAR SCREEN ==================== -->
+<div class="screen active" id="s-cal">
+
+  <div class="hdr">
+    <span style="font-size:22px">📋</span>
+    <div>
+      <h1>Field Inspector</h1>
+      <div class="sub" id="calSubtitle"></div>
+    </div>
+  </div>
+
+  <div class="cal-nav">
+    <button class="ico-btn" onclick="prevMo()">‹</button>
+    <h2 id="moLbl"></h2>
+    <button class="ico-btn" onclick="nextMo()">›</button>
+  </div>
+
+  <div class="cal-grid">
+    <div class="cal-dow">
+      <div>Su</div><div>Mo</div><div>Tu</div>
+      <div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+    </div>
+    <div class="cal-cells" id="calCells"></div>
+  </div>
+
+  <div class="day-list">
+    <div class="day-lbl" id="dayLbl"></div>
+    <div id="dayList"></div>
+  </div>
+
+  <button class="fab" onclick="newIns()">+</button>
+</div>
+
+<!-- ==================== FORM SCREEN ==================== -->
+<div class="screen" id="s-form">
+  <div class="hdr">
+    <button class="ico-btn" onclick="goHome()">‹</button>
+    <h1 id="formTitle">New Inspection</h1>
+    <div style="width:36px"></div>
+  </div>
+
+  <div class="form-body">
+
+    <!-- Date display -->
+    <div class="fsec" style="margin-bottom:14px">
+      <div class="fld" style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">📅</span>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:2px">Inspection Date</div>
+          <div id="formDateLbl" style="font-size:16px;font-weight:600;color:var(--navy)"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERMIT INFO -->
+    <div class="fsec">
+      <div class="fsec-hdr">📄 Encroachment Permit</div>
+      <button class="scan-btn" onclick="triggerOCR()">📸&nbsp; Scan Permit – Auto-Fill Fields</button>
+      <div style="height:8px"></div>
+      <div class="fld">
+        <label>Permit Number</label>
+        <input type="text" id="fp-num" placeholder="e.g., EP-2024-00123" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>Permittee</label>
+        <input type="text" id="fp-per" placeholder="Name or company" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>Location</label>
+        <input type="text" id="fp-loc" placeholder="Street address or intersection" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>Proposed Work</label>
+        <textarea id="fp-work" placeholder="Describe the permitted work…"></textarea>
+      </div>
+    </div>
+
+    <!-- CONDITIONS -->
+    <div class="fsec">
+      <div class="fsec-hdr">🌤 Field Conditions</div>
+      <button class="wx-btn" onclick="getWeather()">🌐&nbsp; Auto-Fill Weather</button>
+      <div style="height:6px"></div>
+      <div class="fld">
+        <label>Weather</label>
+        <input type="text" id="fp-wx" placeholder="e.g., Partly Cloudy" autocomplete="off">
+      </div>
+      <div class="frow">
+        <div class="fld">
+          <label>High Temp (°F)</label>
+          <input type="number" id="fp-hi" placeholder="—">
+        </div>
+        <div class="fld">
+          <label>Low Temp (°F)</label>
+          <input type="number" id="fp-lo" placeholder="—">
+        </div>
+      </div>
+      <div class="fld">
+        <label>Site Condition</label>
+        <textarea id="fp-site" placeholder="Describe current site conditions…"></textarea>
+      </div>
+      <div class="fld">
+        <label>Material Delivery</label>
+        <textarea id="fp-mat" placeholder="Materials received on site…"></textarea>
+      </div>
+      <div class="fld">
+        <label>Labor Force</label>
+        <input type="text" id="fp-lab" placeholder="e.g., 4 laborers, 1 operator, 1 foreman" autocomplete="off">
+      </div>
+    </div>
+
+    <!-- PHOTOS -->
+    <div class="fsec">
+      <div class="fsec-hdr">📷 Photos</div>
+      <div class="ph-grid" id="phGrid">
+        <button class="ph-add" onclick="addPhoto()">
+          <span class="pi">📷</span><span>Add Photo</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="fsec">
+      <div class="fsec-hdr">📝 Inspection Notes</div>
+      <div class="rec-ind" id="recInd"><div class="rec-dot"></div> Recording…</div>
+      <div class="vc">
+        <button class="btn-rec go" id="btnRec" onclick="toggleRec()">🎤&nbsp; Start Dictating</button>
+      </div>
+      <div class="fld">
+        <label>Notes</label>
+        <textarea id="fp-notes" placeholder="Dictate or type inspection notes here…" style="min-height:110px"></textarea>
+      </div>
+    </div>
+
+  </div><!-- /form-body -->
+
+  <div class="save-bar">
+    <button class="btn-save" onclick="saveIns()">💾&nbsp; Save Inspection</button>
+    <button class="btn-del" id="btnDel" onclick="delIns()" style="display:none">🗑</button>
+  </div>
+
+  <!-- Hidden file inputs -->
+  <input type="file" id="phInput" accept="image/*" capture="environment" multiple style="display:none" onchange="onPhotoFiles(event)">
+  <input type="file" id="ocrInput" accept="image/*,application/pdf" style="display:none" onchange="onOCRFile(event)">
+</div>
+
+<!-- ==================== DETAIL SCREEN ==================== -->
+<div class="screen" id="s-det">
+  <div class="hdr">
+    <button class="ico-btn" onclick="goHome()">‹</button>
+    <h1 id="detTitle">Inspection</h1>
+    <div style="width:36px"></div>
+  </div>
+  <div class="det-body" id="detBody"></div>
+  <div class="copy-bar">
+    <button class="btn-copy" onclick="copyReport()">📋&nbsp; Copy for eBuilder</button>
+    <button class="btn-edit" onclick="editCurrent()">✏️ Edit</button>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<script>
+/* =============================================
+   UTILITIES
+============================================= */
+const today = new Date();
+
+function fmtDate(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDisplay(s){
+  const [y,m,d]=s.split('-');
+  return new Date(+y,+m-1,+d).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2)}
+
+let toastTimer;
+function toast(msg,ms=2800){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('on');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),ms);
+}
+function loading(msg='Processing…'){
+  document.getElementById('ovTxt').textContent=msg;
+  document.getElementById('ov').classList.add('on');
+}
+function doneLoad(){document.getElementById('ov').classList.remove('on')}
+
+function openModal(src){
+  document.getElementById('phModalImg').src=src;
+  document.getElementById('phModal').classList.add('on');
+}
+function closeModal(){document.getElementById('phModal').classList.remove('on')}
+
+/* =============================================
+   STATE
+============================================= */
+const S={
+  month:today.getMonth(),
+  year:today.getFullYear(),
+  selDate:fmtDate(today),
+  curId:null,          // editing inspection id
+  photos:[],           // [{id,dataUrl}] for form
+  activeDates:new Set(),
+  rec:null,
+  recOn:false
+};
+
+/* =============================================
+   DATABASE (IndexedDB)
+============================================= */
+const DB=(()=>{
+  let db=null;
+  const NAME='FieldInspector',VER=1;
+  async function init(){
+    return new Promise((ok,fail)=>{
+      const r=indexedDB.open(NAME,VER);
+      r.onupgradeneeded=e=>{
+        const d=e.target.result;
+        if(!d.objectStoreNames.contains('ins')){
+          const st=d.createObjectStore('ins',{keyPath:'id'});
+          st.createIndex('date','date',{unique:false});
+        }
+      };
+      r.onsuccess=e=>{db=e.target.result;ok()};
+      r.onerror=e=>fail(e.target.error);
+    });
+  }
+  function tx(wr){return db.transaction('ins',wr?'readwrite':'readonly').objectStore('ins')}
+  function p(r){return new Promise((ok,fail)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>fail(r.error)})}
+  const getAll=()=>p(tx().getAll()).then(r=>r||[]);
+  const byDate=dt=>p(tx().index('date').getAll(dt)).then(r=>r||[]);
+  const get=id=>p(tx().get(id));
+  const save=item=>p(tx(1).put(item));
+  const del=id=>p(tx(1).delete(id));
+  const activeDates=async()=>{const a=await getAll();return new Set(a.map(i=>i.date))};
+  return{init,getAll,byDate,get,save,del,activeDates};
+})();
+
+/* =============================================
+   CALENDAR
+============================================= */
+function renderCal(){
+  const {month,year,selDate}=S;
+  const todStr=fmtDate(today);
+  document.getElementById('moLbl').textContent=
+    new Date(year,month,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  document.getElementById('calSubtitle').textContent=
+    selDate===todStr?'Today':'Viewing: '+fmtDisplay(selDate).split(',')[0]+fmtDisplay(selDate).slice(fmtDisplay(selDate).indexOf(','));
+
+  const first=new Date(year,month,1).getDay();
+  const dim=new Date(year,month+1,0).getDate();
+  const dprev=new Date(year,month,0).getDate();
+  const total=Math.ceil((first+dim)/7)*7;
+  let html='';
+  for(let i=0;i<total;i++){
+    let day,ds,cls='cc';
+    if(i<first){day=dprev-first+i+1;ds=fmtDate(new Date(year,month-1,day));cls+=' other';}
+    else if(i<first+dim){day=i-first+1;ds=fmtDate(new Date(year,month,day));}
+    else{day=i-first-dim+1;ds=fmtDate(new Date(year,month+1,day));cls+=' other';}
+    if(ds===todStr)cls+=' today';
+    if(ds===selDate)cls+=' sel';
+    if(S.activeDates.has(ds))cls+=' has';
+    html+=`<div class="${cls}" onclick="pickDate('${ds}')">${day}</div>`;
+  }
+  document.getElementById('calCells').innerHTML=html;
+}
+
+function prevMo(){
+  if(S.month===0){S.month=11;S.year--;}else S.month--;
+  renderCal();
+}
+function nextMo(){
+  if(S.month===11){S.month=0;S.year++;}else S.month++;
+  renderCal();
+}
+
+async function pickDate(ds){
+  S.selDate=ds;
+  renderCal();
+  await loadDay(ds);
+}
+
+async function loadDay(ds){
+  const todStr=fmtDate(today);
+  document.getElementById('dayLbl').textContent=
+    ds===todStr?'Today\'s Inspections':fmtDisplay(ds);
+  const list=await DB.byDate(ds);
+  const el=document.getElementById('dayList');
+  if(!list.length){
+    el.innerHTML=`<div class="empty"><div class="ei">📋</div><h3>No inspections logged</h3><p>Tap + to add one for this date</p></div>`;
+    return;
+  }
+  el.innerHTML=list.map(ins=>`
+    <div class="ins-card" onclick="viewIns('${ins.id}')">
+      <h3>${ins.permitNumber||'No Permit #'}${ins.permittee?' – '+ins.permittee:''}</h3>
+      <div class="meta">
+        <span>📍 ${ins.location||'No location'}</span>
+        ${ins.weather?`<span>🌤 ${ins.weather}${ins.tempHigh?' '+ins.tempHigh+'°/'+ins.tempLow+'°':''}</span>`:''}
+      </div>
+      ${ins.photos&&ins.photos.length?`<span class="pcnt">📷 ${ins.photos.length} photo${ins.photos.length!==1?'s':''}</span>`:''}
+    </div>`).join('');
+}
+
+/* =============================================
+   FORM — NEW / EDIT
+============================================= */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s-'+id).classList.add('active');
+}
+
+function newIns(){
+  S.curId=null;S.photos=[];
+  clearForm();
+  document.getElementById('formTitle').textContent='New Inspection';
+  document.getElementById('formDateLbl').textContent=fmtDisplay(S.selDate);
+  document.getElementById('btnDel').style.display='none';
+  renderPhotos();
+  showScreen('form');
+}
+
+function clearForm(){
+  ['fp-num','fp-per','fp-loc','fp-work','fp-wx','fp-hi','fp-lo',
+   'fp-site','fp-mat','fp-lab','fp-notes'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+}
+
+function renderPhotos(){
+  const g=document.getElementById('phGrid');
+  let h=S.photos.map((p,i)=>`
+    <div class="ph-wrap">
+      <img class="ph-thumb" src="${p.dataUrl}" onclick="openModal('${p.dataUrl.replace(/'/g,'&#39;')}')">
+      <button class="ph-del" onclick="rmPhoto(${i})">✕</button>
+    </div>`).join('');
+  h+=`<button class="ph-add" onclick="addPhoto()"><span class="pi">📷</span><span>Add</span></button>`;
+  g.innerHTML=h;
+}
+
+function addPhoto(){document.getElementById('phInput').click()}
+
+function onPhotoFiles(e){
+  const files=e.target.files;if(!files.length)return;
+  Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=ev=>compress(ev.target.result,1280,.82,d=>{S.photos.push({id:uid(),dataUrl:d});renderPhotos()});
+    r.readAsDataURL(f);
+  });
+  e.target.value='';
+}
+
+function compress(src,max,q,cb){
+  const img=new Image();
+  img.onload=()=>{
+    let w=img.width,h=img.height;
+    if(w>max||h>max){if(w>h){h=Math.round(h*max/w);w=max;}else{w=Math.round(w*max/h);h=max;}}
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',q));
+  };img.src=src;
+}
+
+function rmPhoto(i){S.photos.splice(i,1);renderPhotos()}
+
+/* =============================================
+   OCR
+============================================= */
+function triggerOCR(){document.getElementById('ocrInput').click()}
+
+async function onOCRFile(e){
+  const file=e.target.files[0];if(!file)return;e.target.value='';
+  loading('📸 Reading permit…');
+  const r=new FileReader();
+  r.onload=async ev=>{
+    const dataUrl=ev.target.result;
+    if(file.type==='application/pdf'){
+      doneLoad();toast('PDF attached – fill fields manually or use a photo');
+      return;
+    }
+    try{
+      const res=await Tesseract.recognize(dataUrl,'eng',{
+        logger:m=>{
+          if(m.status==='recognizing text')
+            document.getElementById('ovTxt').textContent=
+              `Reading permit: ${Math.round(m.progress*100)}%`;
+        }
+      });
+      parsePermit(res.data.text);
+      compress(dataUrl,1280,.82,d=>{S.photos.push({id:uid(),dataUrl:d});renderPhotos()});
+      doneLoad();toast('✅ Permit scanned — review the fields');
+    }catch(err){doneLoad();toast('OCR failed — fill in fields manually');console.error(err)}
+  };
+  r.readAsDataURL(file);
+}
+
+function parsePermit(txt){
+  // Permit number
+  const pn=txt.match(/(?:permit\s*(?:no\.?|number|#)?\s*[:\-]?\s*)([\w\-\/]+)/i)||txt.match(/\bEP[-\s]?[\d\-]+/i);
+  if(pn){const f=document.getElementById('fp-num');if(!f.value)f.value=(pn[1]||pn[0]).trim().substring(0,40);}
+
+  // Permittee
+  const pe=txt.match(/(?:permittee|applicant|issued\s*to|owner)\s*[:\-]?\s*([^\n]{3,80})/i);
+  if(pe){const f=document.getElementById('fp-per');if(!f.value)f.value=pe[1].trim();}
+
+  // Location — prefer a street address pattern, fallback to labeled field
+  const la=txt.match(/\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Street|St|Avenue|Ave|Blvd|Boulevard|Drive|Dr|Road|Rd|Lane|Ln|Way|Court|Ct|Place|Pl)/i)
+           ||txt.match(/(?:location|address|site|work\s*site)\s*[:\-]?\s*([^\n]{5,120})/i);
+  if(la){const f=document.getElementById('fp-loc');if(!f.value)f.value=(la[1]||la[0]).trim().substring(0,150);}
+
+  // Proposed work
+  const pw=txt.match(/(?:proposed\s*work|work\s*description|description\s*of\s*work|scope\s*of\s*work|nature\s*of\s*work)\s*[:\-]?\s*([\s\S]{10,400}?)(?:\n{2,}|$)/i);
+  if(pw){const f=document.getElementById('fp-work');if(!f.value)f.value=pw[1].replace(/\n/g,' ').trim().substring(0,500);}
+}
+
+/* =============================================
+   WEATHER  (Open-Meteo — free, no API key)
+============================================= */
+const WMO={
+  0:'Clear Sky',1:'Mainly Clear',2:'Partly Cloudy',3:'Overcast',
+  45:'Foggy',48:'Icy Fog',
+  51:'Light Drizzle',53:'Moderate Drizzle',55:'Heavy Drizzle',
+  56:'Freezing Drizzle',57:'Heavy Freezing Drizzle',
+  61:'Light Rain',63:'Moderate Rain',65:'Heavy Rain',
+  66:'Freezing Rain',67:'Heavy Freezing Rain',
+  71:'Light Snow',73:'Moderate Snow',75:'Heavy Snow',77:'Snow Grains',
+  80:'Light Showers',81:'Moderate Showers',82:'Heavy Showers',
+  85:'Light Snow Showers',86:'Heavy Snow Showers',
+  95:'Thunderstorm',96:'Thunderstorm w/ Hail',99:'Thunderstorm w/ Heavy Hail'
+};
+
+async function getWeather(){
+  loading('🌐 Fetching weather…');
+  try{
+    const pos=await new Promise((ok,fail)=>
+      navigator.geolocation.getCurrentPosition(ok,fail,{timeout:8000}));
+    const{latitude:lat,longitude:lon}=pos.coords;
+    const dt=S.selDate;
+    const todStr=fmtDate(today);
+    const isFuture=dt>=todStr;
+    const url=isFuture
+      ?`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=7`
+      :`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dt}&end_date=${dt}&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=auto`;
+    const res=await fetch(url);
+    const data=await res.json();
+    let idx=0;
+    if(isFuture&&data.daily&&data.daily.time){idx=data.daily.time.indexOf(dt);if(idx<0)idx=0;}
+    const code=data.daily.weathercode[idx];
+    const hi=Math.round(data.daily.temperature_2m_max[idx]);
+    const lo=Math.round(data.daily.temperature_2m_min[idx]);
+    const cond=WMO[code]||`WMO ${code}`;
+    document.getElementById('fp-wx').value=cond;
+    document.getElementById('fp-hi').value=hi;
+    document.getElementById('fp-lo').value=lo;
+    doneLoad();toast(`🌤 ${cond} | ${hi}°F / ${lo}°F`);
+  }catch(err){
+    doneLoad();
+    if(err&&err.code===1)toast('Location denied — enter weather manually');
+    else toast('Weather unavailable — enter manually');
+    console.error('Weather:',err);
+  }
+}
+
+/* =============================================
+   VOICE DICTATION
+============================================= */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+
+function toggleRec(){S.recOn?stopRec():startRec()}
+
+function startRec(){
+  if(!SR){toast('Speech recognition not supported — try Chrome or Safari');return}
+  const notes=document.getElementById('fp-notes');
+  const btn=document.getElementById('btnRec');
+  const ind=document.getElementById('recInd');
+  S.rec=new SR();
+  S.rec.continuous=true;S.rec.interimResults=true;S.rec.lang='en-US';
+  let final=notes.value;if(final&&!final.endsWith(' '))final+=' ';
+  S.rec.onresult=ev=>{
+    let tmp='';
+    for(let i=ev.resultIndex;i<ev.results.length;i++){
+      const t=ev.results[i][0].transcript;
+      if(ev.results[i].isFinal)final+=t+' ';else tmp+=t;
+    }
+    notes.value=final+tmp;
+    notes.scrollTop=notes.scrollHeight;
+  };
+  S.rec.onerror=e=>{if(e.error!=='no-speech'){stopRec();toast('Recording stopped')}};
+  S.rec.onend=()=>{if(S.recOn)S.rec.start()};// auto-restart
+  S.rec.start();S.recOn=true;
+  btn.textContent='⏹  Stop Recording';btn.classList.replace('go','stop');
+  ind.classList.add('on');
+}
+
+function stopRec(){
+  if(S.rec){S.recOn=false;S.rec.stop();S.rec=null;}
+  const btn=document.getElementById('btnRec');
+  const ind=document.getElementById('recInd');
+  if(btn){btn.textContent='🎤\u00A0 Start Dictating';btn.classList.replace('stop','go');}
+  if(ind)ind.classList.remove('on');
+}
+
+/* =============================================
+   SAVE / DELETE
+============================================= */
+async function saveIns(){
+  stopRec();
+  const ins={
+    id:S.curId||uid(),
+    date:S.selDate,
+    permitNumber:document.getElementById('fp-num').value.trim(),
+    permittee:document.getElementById('fp-per').value.trim(),
+    location:document.getElementById('fp-loc').value.trim(),
+    proposedWork:document.getElementById('fp-work').value.trim(),
+    weather:document.getElementById('fp-wx').value.trim(),
+    tempHigh:document.getElementById('fp-hi').value||null,
+    tempLow:document.getElementById('fp-lo').value||null,
+    siteCondition:document.getElementById('fp-site').value.trim(),
+    materialDelivery:document.getElementById('fp-mat').value.trim(),
+    laborForce:document.getElementById('fp-lab').value.trim(),
+    notes:document.getElementById('fp-notes').value.trim(),
+    photos:[...S.photos],
+    updatedAt:new Date().toISOString()
+  };
+  if(S.curId){const ex=await DB.get(S.curId);if(ex)ins.createdAt=ex.createdAt;}
+  if(!ins.createdAt)ins.createdAt=ins.updatedAt;
+  loading('Saving…');
+  await DB.save(ins);
+  S.activeDates=await DB.activeDates();
+  doneLoad();toast('✅ Saved');
+  goHome();
+}
+
+async function delIns(){
+  if(!S.curId)return;
+  if(!confirm('Delete this inspection?'))return;
+  await DB.del(S.curId);
+  S.activeDates=await DB.activeDates();
+  toast('Deleted');goHome();
+}
+
+/* =============================================
+   DETAIL VIEW
+============================================= */
+async function viewIns(id){
+  const ins=await DB.get(id);if(!ins)return;
+  S.curId=id;
+  document.getElementById('detTitle').textContent=ins.permitNumber||fmtDisplay(ins.date).split(',')[0];
+  const photos=ins.photos&&ins.photos.length
+    ?`<div class="det-sec"><h3>📷 Photos (${ins.photos.length})</h3>
+       <div class="det-photos">${ins.photos.map(p=>`<img src="${p.dataUrl}" onclick="openModal('${p.dataUrl.replace(/'/g,'&#39;')}')">`).join('')}</div></div>`:'';
+  document.getElementById('detBody').innerHTML=`
+    <div class="det-sec">
+      <h3>📄 Permit Information</h3>
+      <div class="det-grid">
+        <div class="df"><label>Date</label><div class="dv">${fmtDisplay(ins.date)}</div></div>
+        <div class="df"><label>Permit #</label><div class="dv">${ins.permitNumber||'—'}</div></div>
+        <div class="df"><label>Permittee</label><div class="dv">${ins.permittee||'—'}</div></div>
+      </div>
+      <div class="df" style="margin-top:10px"><label>Location</label><div class="dv">${ins.location||'—'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Proposed Work</label><div class="dv">${ins.proposedWork||'—'}</div></div>
+    </div>
+    <div class="det-sec">
+      <h3>🌤 Field Conditions</h3>
+      <div class="det-grid">
+        <div class="df"><label>Weather</label><div class="dv">${ins.weather||'—'}</div></div>
+        <div class="df"><label>Temp</label><div class="dv">${ins.tempHigh?ins.tempHigh+'°F / '+ins.tempLow+'°F':'—'}</div></div>
+      </div>
+      <div class="df" style="margin-top:10px"><label>Site Condition</label><div class="dv">${ins.siteCondition||'—'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Material Delivery</label><div class="dv">${ins.materialDelivery||'—'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Labor Force</label><div class="dv">${ins.laborForce||'—'}</div></div>
+    </div>
+    ${photos}
+    ${ins.notes?`<div class="det-sec"><h3>📝 Inspection Notes</h3><div class="dv" style="font-size:15px;line-height:1.65">${ins.notes}</div></div>`:''}
+  `;
+  showScreen('det');
+}
+
+function editCurrent(){
+  if(!S.curId)return;
+  loadToForm(S.curId);
+}
+
+async function loadToForm(id){
+  const ins=await DB.get(id);if(!ins)return;
+  S.curId=id;S.selDate=ins.date;
+  S.photos=ins.photos?[...ins.photos]:[];
+  document.getElementById('formTitle').textContent='Edit Inspection';
+  document.getElementById('formDateLbl').textContent=fmtDisplay(ins.date);
+  document.getElementById('btnDel').style.display='';
+  document.getElementById('fp-num').value=ins.permitNumber||'';
+  document.getElementById('fp-per').value=ins.permittee||'';
+  document.getElementById('fp-loc').value=ins.location||'';
+  document.getElementById('fp-work').value=ins.proposedWork||'';
+  document.getElementById('fp-wx').value=ins.weather||'';
+  document.getElementById('fp-hi').value=ins.tempHigh||'';
+  document.getElementById('fp-lo').value=ins.tempLow||'';
+  document.getElementById('fp-site').value=ins.siteCondition||'';
+  document.getElementById('fp-mat').value=ins.materialDelivery||'';
+  document.getElementById('fp-lab').value=ins.laborForce||'';
+  document.getElementById('fp-notes').value=ins.notes||'';
+  renderPhotos();showScreen('form');
+}
+
+/* =============================================
+   COPY TO CLIPBOARD (eBuilder paste)
+============================================= */
+async function copyReport(){
+  const ins=await DB.get(S.curId);if(!ins)return;
+  const txt=[
+    '─── FIELD INSPECTION REPORT ───',
+    `Date:              ${fmtDisplay(ins.date)}`,
+    '',
+    '─── PERMIT INFORMATION ───',
+    `Encroachment Permit #:  ${ins.permitNumber||'N/A'}`,
+    `Permittee:         ${ins.permittee||'N/A'}`,
+    `Location:          ${ins.location||'N/A'}`,
+    `Proposed Work:     ${ins.proposedWork||'N/A'}`,
+    '',
+    '─── FIELD CONDITIONS ───',
+    `Weather:           ${ins.weather||'N/A'}`,
+    `Temperature:       ${ins.tempHigh?'High '+ins.tempHigh+'°F  /  Low '+ins.tempLow+'°F':'N/A'}`,
+    `Site Condition:    ${ins.siteCondition||'N/A'}`,
+    `Material Delivery: ${ins.materialDelivery||'N/A'}`,
+    `Labor Force:       ${ins.laborForce||'N/A'}`,
+    '',
+    '─── INSPECTION NOTES ───',
+    ins.notes||'N/A',
+    '',
+    `Generated: ${new Date().toLocaleString()}`
+  ].join('\n');
+  try{
+    await navigator.clipboard.writeText(txt);
+    toast('📋 Copied — paste into eBuilder');
+  }catch{
+    // fallback
+    const ta=document.createElement('textarea');
+    ta.value=txt;ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('📋 Copied — paste into eBuilder');
+  }
+}
+
+/* =============================================
+   NAV
+============================================= */
+function goHome(){
+  stopRec();
+  showScreen('cal');
+  renderCal();
+  loadDay(S.selDate);
+}
+
+/* =============================================
+   INIT
+============================================= */
+async function init(){
+  try{
+    await DB.init();
+    S.activeDates=await DB.activeDates();
+    renderCal();
+    await loadDay(S.selDate);
+    if('serviceWorker' in navigator)
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }catch(e){
+    console.error('Init error:',e);
+    renderCal();
+  }
+}
+init();
+</script>
+</body>
+</html>
