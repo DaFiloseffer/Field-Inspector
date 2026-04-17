@@ -220,8 +220,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .det-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .df label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
 .df .dv{font-size:15px;color:var(--text);margin-top:2px;white-space:pre-wrap;line-height:1.5}
-.det-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
-.det-photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer}
+/* det-photos grid now handled by .det-ph-wrap above */
 
 .copy-bar{
   position:sticky;bottom:0;background:#fff;
@@ -251,10 +250,19 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 }
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
-.modal{display:none;position:fixed;inset:0;background:#000;z-index:3000;align-items:center;justify-content:center}
+.modal{display:none;position:fixed;inset:0;background:#000;z-index:3000;align-items:center;justify-content:center;flex-direction:column}
 .modal.on{display:flex}
-.modal img{max-width:100%;max-height:100%;object-fit:contain}
+.modal img{max-width:100%;max-height:calc(100% - 80px);object-fit:contain;flex:1}
 .modal-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer}
+.modal-bar{display:flex;gap:10px;padding:12px 16px;width:100%;justify-content:center;flex-shrink:0}
+.modal-btn{padding:11px 22px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px}
+.modal-btn.share{background:var(--blue);color:#fff}
+.modal-btn.dl{background:rgba(255,255,255,.15);color:#fff}
+/* photo share overlay in detail */
+.det-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.det-ph-wrap{position:relative}
+.det-ph-wrap img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;display:block}
+.det-ph-share{position:absolute;bottom:4px;right:4px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 </style>
 </head>
 <body>
@@ -270,6 +278,10 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <div class="modal" id="phModal">
   <button class="modal-x" onclick="closeModal()">✕</button>
   <img id="phModalImg" src="" alt="">
+  <div class="modal-bar">
+    <button class="modal-btn share" onclick="shareCurrentPhoto()">⬆️&nbsp; Share</button>
+    <button class="modal-btn dl" onclick="downloadCurrentPhoto()">⬇️&nbsp; Save</button>
+  </div>
 </div>
 
 <!-- TOAST -->
@@ -430,7 +442,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
   <div class="det-body" id="detBody"></div>
   <div class="copy-bar">
     <button class="btn-copy" onclick="copyReport()">📋&nbsp; Copy for eBuilder</button>
-    <button class="btn-edit" onclick="editCurrent()">✏️ Edit</button>
+    <button class="btn-edit" id="btnShareAll" onclick="shareAllPhotos()" style="background:var(--blue)">📤</button>
+    <button class="btn-edit" onclick="editCurrent()">✏️</button>
   </div>
 </div>
 
@@ -463,11 +476,69 @@ function loading(msg='Processing…'){
 }
 function doneLoad(){document.getElementById('ov').classList.remove('on')}
 
+let _modalSrc='';
 function openModal(src){
+  _modalSrc=src;
   document.getElementById('phModalImg').src=src;
   document.getElementById('phModal').classList.add('on');
 }
-function closeModal(){document.getElementById('phModal').classList.remove('on')}
+function closeModal(){document.getElementById('phModal').classList.remove('on');_modalSrc='';}
+
+// Share a single photo via native share sheet (iOS/Android) or download on desktop
+async function sharePhoto(dataUrl, filename='inspection-photo.jpg'){
+  try{
+    const res=await fetch(dataUrl);
+    const blob=await res.blob();
+    const file=new File([blob],filename,{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:'Inspection Photo'});
+    } else {
+      // fallback: download
+      _downloadBlob(dataUrl,filename);
+      toast('Photo saved');
+    }
+  }catch(e){
+    if(e.name!=='AbortError'){_downloadBlob(dataUrl,filename);toast('Photo saved');}
+  }
+}
+
+function downloadCurrentPhoto(){
+  if(_modalSrc)_downloadBlob(_modalSrc,'inspection-photo.jpg');
+}
+
+function shareCurrentPhoto(){
+  if(_modalSrc)sharePhoto(_modalSrc,'inspection-photo.jpg');
+}
+
+function _downloadBlob(dataUrl,filename){
+  const a=document.createElement('a');
+  a.href=dataUrl;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+// Share ALL photos from current inspection as individual files
+async function shareAllPhotos(){
+  const ins=await DB.get(S.curId);
+  if(!ins||!ins.photos||!ins.photos.length){toast('No photos to share');return;}
+  if(ins.photos.length===1){sharePhoto(ins.photos[0].dataUrl,'inspection-photo-1.jpg');return;}
+  // Multi-file share if supported
+  try{
+    const files=await Promise.all(ins.photos.map(async(p,i)=>{
+      const res=await fetch(p.dataUrl);
+      const blob=await res.blob();
+      return new File([blob],`inspection-photo-${i+1}.jpg`,{type:'image/jpeg'});
+    }));
+    if(navigator.canShare&&navigator.canShare({files})){
+      await navigator.share({files,title:`Inspection Photos (${files.length})`});
+    } else {
+      // fallback: download each
+      ins.photos.forEach((p,i)=>_downloadBlob(p.dataUrl,`inspection-photo-${i+1}.jpg`));
+      toast(`${ins.photos.length} photos saved`);
+    }
+  }catch(e){
+    if(e.name!=='AbortError') toast('Could not share — try individual photos');
+  }
+}
 
 /* =============================================
    STATE
@@ -825,7 +896,11 @@ async function viewIns(id){
   document.getElementById('detTitle').textContent=ins.permitNumber||fmtDisplay(ins.date).split(',')[0];
   const photos=ins.photos&&ins.photos.length
     ?`<div class="det-sec"><h3>📷 Photos (${ins.photos.length})</h3>
-       <div class="det-photos">${ins.photos.map(p=>`<img src="${p.dataUrl}" onclick="openModal('${p.dataUrl.replace(/'/g,'&#39;')}')">`).join('')}</div></div>`:'';
+       <div class="det-photos">${ins.photos.map((p,i)=>`
+         <div class="det-ph-wrap">
+           <img src="${p.dataUrl}" onclick="openModal('${p.dataUrl.replace(/'/g,'&#39;')}')">
+           <button class="det-ph-share" onclick="sharePhoto('${p.dataUrl.replace(/'/g,'&#39;')}','inspection-photo-${i+1}.jpg')" title="Share">⬆️</button>
+         </div>`).join('')}</div></div>`:'';
   document.getElementById('detBody').innerHTML=`
     <div class="det-sec">
       <h3>📄 Permit Information</h3>
