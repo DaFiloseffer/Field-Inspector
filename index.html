@@ -254,6 +254,19 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .modal.on{display:flex}
 .modal img{max-width:100%;max-height:calc(100% - 80px);object-fit:contain;flex:1}
 .modal-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer}
+/* photo share prompt */
+.ph-prompt{
+  display:none;position:fixed;bottom:0;left:0;right:0;z-index:2500;
+  background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;
+  box-shadow:0 -4px 24px rgba(0,0,0,.18);
+}
+.ph-prompt.on{display:block}
+.ph-prompt h3{font-size:16px;font-weight:700;margin-bottom:6px}
+.ph-prompt p{font-size:14px;color:var(--muted);margin-bottom:16px;line-height:1.5}
+.ph-prompt-btns{display:flex;gap:10px}
+.ph-prompt-btns button{flex:1;padding:13px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer}
+.ph-prompt-share{background:var(--blue);color:#fff}
+.ph-prompt-dismiss{background:var(--bg);color:var(--text)}
 .modal-bar{display:flex;gap:10px;padding:12px 16px;width:100%;justify-content:center;flex-shrink:0}
 .modal-btn{padding:11px 22px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px}
 .modal-btn.share{background:var(--blue);color:#fff}
@@ -286,6 +299,16 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- PHOTO SHARE PROMPT -->
+<div class="ph-prompt" id="photoPrompt">
+  <h3>📋 Report text copied!</h3>
+  <p>Photos can't be pasted as text — tap below to share your <strong><span id="photoPromptCount">0</span> photo(s)</strong> directly to eBuilder or save them to your camera roll.</p>
+  <div class="ph-prompt-btns">
+    <button class="ph-prompt-share" onclick="hidePhotoPrompt();shareAllPhotos()">📤 Share Photos</button>
+    <button class="ph-prompt-dismiss" onclick="hidePhotoPrompt();toast('📋 Report copied — paste into eBuilder')">Done</button>
+  </div>
+</div>
 
 <!-- ==================== CALENDAR SCREEN ==================== -->
 <div class="screen active" id="s-cal">
@@ -324,7 +347,10 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <div class="screen" id="s-form">
   <div class="hdr">
     <button class="ico-btn" onclick="goHome()">‹</button>
-    <h1 id="formTitle">New Inspection</h1>
+    <div style="flex:1;min-width:0">
+      <h1 id="formTitle">New Inspection</h1>
+      <div id="draftBadge" style="display:none;font-size:11px;opacity:.75;margin-top:1px"></div>
+    </div>
     <div style="width:36px"></div>
   </div>
 
@@ -658,7 +684,7 @@ function showScreen(id){
   document.getElementById('s-'+id).classList.add('active');
 }
 
-function newIns(){
+async function newIns(){
   S.curId=null;S.photos=[];
   clearForm();
   document.getElementById('formTitle').textContent='New Inspection';
@@ -666,6 +692,8 @@ function newIns(){
   document.getElementById('btnDel').style.display='none';
   renderPhotos();
   showScreen('form');
+  // Check for unsaved draft
+  await checkDraft();
 }
 
 function clearForm(){
@@ -874,6 +902,7 @@ async function saveIns(){
   if(!ins.createdAt)ins.createdAt=ins.updatedAt;
   loading('Saving…');
   await DB.save(ins);
+  await clearDraft();
   S.activeDates=await DB.activeDates();
   doneLoad();toast('✅ Saved');
   goHome();
@@ -883,8 +912,105 @@ async function delIns(){
   if(!S.curId)return;
   if(!confirm('Delete this inspection?'))return;
   await DB.del(S.curId);
+  await clearDraft();
   S.activeDates=await DB.activeDates();
   toast('Deleted');goHome();
+}
+
+/* =============================================
+   AUTO-SAVE DRAFT
+============================================= */
+const DRAFT_ID='__draft__';
+let _autoSaveTimer=null;
+let _lastDraftSave=null;
+
+function formHasContent(){
+  return ['fp-num','fp-per','fp-loc','fp-work','fp-notes','fp-site','fp-mat','fp-lab']
+    .some(id=>{const el=document.getElementById(id);return el&&el.value.trim();})
+    || S.photos.length>0;
+}
+
+async function saveDraft(){
+  // Only save if on the form screen and there's something to save
+  if(!document.getElementById('s-form').classList.contains('active'))return;
+  if(!formHasContent())return;
+  const draft={
+    id:DRAFT_ID,
+    date:S.selDate,
+    _isDraft:true,
+    permitNumber:document.getElementById('fp-num').value.trim(),
+    permittee:document.getElementById('fp-per').value.trim(),
+    location:document.getElementById('fp-loc').value.trim(),
+    proposedWork:document.getElementById('fp-work').value.trim(),
+    weather:document.getElementById('fp-wx').value.trim(),
+    tempHigh:document.getElementById('fp-hi').value||null,
+    tempLow:document.getElementById('fp-lo').value||null,
+    siteCondition:document.getElementById('fp-site').value.trim(),
+    materialDelivery:document.getElementById('fp-mat').value.trim(),
+    laborForce:document.getElementById('fp-lab').value.trim(),
+    notes:document.getElementById('fp-notes').value.trim(),
+    photos:[...S.photos],
+    savedAt:new Date().toISOString()
+  };
+  await DB.save(draft);
+  _lastDraftSave=new Date();
+  updateDraftBadge();
+}
+
+async function clearDraft(){
+  try{await DB.del(DRAFT_ID);}catch(e){}
+  _lastDraftSave=null;
+  updateDraftBadge();
+}
+
+function updateDraftBadge(){
+  const badge=document.getElementById('draftBadge');
+  if(!badge)return;
+  if(_lastDraftSave){
+    badge.textContent='Draft saved '+_lastDraftSave.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    badge.style.display='block';
+  } else {
+    badge.style.display='none';
+  }
+}
+
+async function checkDraft(){
+  const draft=await DB.get(DRAFT_ID);
+  if(!draft||!draft._isDraft)return;
+  // Only restore if draft has content
+  const hasContent=draft.permitNumber||draft.location||draft.notes||
+                   (draft.photos&&draft.photos.length>0);
+  if(!hasContent)return;
+
+  // Restore draft silently
+  S.selDate=draft.date||S.selDate;
+  document.getElementById('formDateLbl').textContent=fmtDisplay(S.selDate);
+  document.getElementById('fp-num').value=draft.permitNumber||'';
+  document.getElementById('fp-per').value=draft.permittee||'';
+  document.getElementById('fp-loc').value=draft.location||'';
+  document.getElementById('fp-work').value=draft.proposedWork||'';
+  document.getElementById('fp-wx').value=draft.weather||'';
+  document.getElementById('fp-hi').value=draft.tempHigh||'';
+  document.getElementById('fp-lo').value=draft.tempLow||'';
+  document.getElementById('fp-site').value=draft.siteCondition||'';
+  document.getElementById('fp-mat').value=draft.materialDelivery||'';
+  document.getElementById('fp-lab').value=draft.laborForce||'';
+  document.getElementById('fp-notes').value=draft.notes||'';
+  S.photos=draft.photos?[...draft.photos]:[];
+  renderPhotos();
+  _lastDraftSave=new Date(draft.savedAt);
+  updateDraftBadge();
+  const savedTime=new Date(draft.savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  toast(`♻️ Draft restored from ${savedTime} — keep going!`,4000);
+}
+
+function startAutoSave(){
+  if(_autoSaveTimer)clearInterval(_autoSaveTimer);
+  _autoSaveTimer=setInterval(saveDraft,30000); // every 30 seconds
+}
+
+function stopAutoSave(){
+  if(_autoSaveTimer){clearInterval(_autoSaveTimer);_autoSaveTimer=null;}
 }
 
 /* =============================================
@@ -959,6 +1085,9 @@ async function loadToForm(id){
 ============================================= */
 async function copyReport(){
   const ins=await DB.get(S.curId);if(!ins)return;
+  const photoNote=ins.photos&&ins.photos.length
+    ?`Photos: ${ins.photos.length} photo${ins.photos.length!==1?'s':''} attached (share separately below)`
+    :'Photos: None';
   const txt=[
     '─── FIELD INSPECTION REPORT ───',
     `Date:              ${fmtDisplay(ins.date)}`,
@@ -979,19 +1108,31 @@ async function copyReport(){
     '─── INSPECTION NOTES ───',
     ins.notes||'N/A',
     '',
+    photoNote,
     `Generated: ${new Date().toLocaleString()}`
   ].join('\n');
   try{
     await navigator.clipboard.writeText(txt);
-    toast('📋 Copied — paste into eBuilder');
   }catch{
-    // fallback
     const ta=document.createElement('textarea');
     ta.value=txt;ta.style.cssText='position:fixed;opacity:0';
     document.body.appendChild(ta);ta.select();document.execCommand('copy');
     document.body.removeChild(ta);
-    toast('📋 Copied — paste into eBuilder');
   }
+  // Show photo share prompt if there are photos
+  if(ins.photos&&ins.photos.length){
+    showPhotoPrompt(ins.photos.length);
+  } else {
+    toast('📋 Report copied — paste into eBuilder');
+  }
+}
+
+function showPhotoPrompt(count){
+  document.getElementById('photoPromptCount').textContent=count;
+  document.getElementById('photoPrompt').classList.add('on');
+}
+function hidePhotoPrompt(){
+  document.getElementById('photoPrompt').classList.remove('on');
 }
 
 /* =============================================
@@ -1015,6 +1156,15 @@ async function init(){
     await loadDay(S.selDate);
     if('serviceWorker' in navigator)
       navigator.serviceWorker.register('sw.js').catch(()=>{});
+    // Start auto-save interval
+    startAutoSave();
+    // Save draft immediately when phone goes to background / screen locks
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden) saveDraft();
+    });
+    // Also save when user navigates away
+    window.addEventListener('pagehide', saveDraft);
+    window.addEventListener('beforeunload', saveDraft);
   }catch(e){
     console.error('Init error:',e);
     renderCal();
