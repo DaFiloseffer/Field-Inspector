@@ -254,6 +254,23 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .modal.on{display:flex}
 .modal img{max-width:100%;max-height:calc(100% - 80px);object-fit:contain;flex:1}
 .modal-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer}
+/* OCR review panel */
+.ocr-review{
+  display:none;position:fixed;inset:0;z-index:2500;
+  background:rgba(0,0,0,.5);align-items:flex-end;justify-content:center;
+}
+.ocr-review.on{display:flex}
+.ocr-inner{
+  background:#fff;border-radius:20px 20px 0 0;
+  width:100%;max-height:70vh;display:flex;flex-direction:column;
+  padding:0 0 20px;
+}
+.ocr-inner h3{font-size:16px;font-weight:700;padding:16px 16px 4px}
+.ocr-summary{padding:0 16px 12px;font-size:14px;line-height:1.5}
+.ocr-raw-wrap{flex:1;overflow-y:auto;margin:0 16px;background:var(--bg);border-radius:8px;padding:10px}
+.ocr-raw{font-size:11px;font-family:monospace;white-space:pre-wrap;color:var(--muted);line-height:1.5}
+.ocr-toggle{font-size:13px;color:var(--blue);text-decoration:underline;cursor:pointer;padding:8px 16px 0;display:block}
+.ocr-close{margin:12px 16px 0;padding:13px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;width:calc(100% - 32px)}
 /* photo share prompt */
 .ph-prompt{
   display:none;position:fixed;bottom:0;left:0;right:0;z-index:2500;
@@ -299,6 +316,19 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- OCR REVIEW PANEL -->
+<div class="ocr-review" id="ocrReview">
+  <div class="ocr-inner">
+    <h3>📄 Permit Scan Results</h3>
+    <div class="ocr-summary" id="ocrSummary"></div>
+    <span class="ocr-toggle" onclick="document.getElementById('ocrRawWrap').style.display=document.getElementById('ocrRawWrap').style.display==='none'?'block':'none'">Show / hide raw extracted text</span>
+    <div class="ocr-raw-wrap" id="ocrRawWrap" style="display:none">
+      <div class="ocr-raw" id="ocrRawText"></div>
+    </div>
+    <button class="ocr-close" onclick="closeOCRReview()">Got it — review the fields above</button>
+  </div>
+</div>
 
 <!-- PHOTO SHARE PROMPT -->
 <div class="ph-prompt" id="photoPrompt">
@@ -379,6 +409,14 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
       <div class="fld">
         <label>Permittee</label>
         <input type="text" id="fp-per" placeholder="Name or company" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>Contractor</label>
+        <input type="text" id="fp-con" placeholder="Company performing the work" autocomplete="off">
+      </div>
+      <div class="fld">
+        <label>Sub-Contractor</label>
+        <input type="text" id="fp-sub" placeholder="Sub-contractor (if applicable)" autocomplete="off">
       </div>
       <div class="fld">
         <label>Location</label>
@@ -697,7 +735,7 @@ async function newIns(){
 }
 
 function clearForm(){
-  ['fp-num','fp-per','fp-loc','fp-work','fp-wx','fp-hi','fp-lo',
+  ['fp-num','fp-per','fp-con','fp-sub','fp-loc','fp-work','fp-wx','fp-hi','fp-lo',
    'fp-site','fp-mat','fp-lab','fp-notes'].forEach(id=>{
     const el=document.getElementById(id);if(el)el.value='';
   });
@@ -744,50 +782,175 @@ function rmPhoto(i){S.photos.splice(i,1);renderPhotos()}
 ============================================= */
 function triggerOCR(){document.getElementById('ocrInput').click()}
 
+/* Pre-process image for better OCR accuracy:
+   - Scale up small images
+   - Convert to grayscale
+   - Boost contrast */
+function preprocessForOCR(dataUrl){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      // Scale up if small — Tesseract works best at ~300 DPI equivalent
+      const maxDim=2400;
+      const scale=Math.min(3,Math.max(1,maxDim/Math.max(img.width,img.height)));
+      const w=Math.round(img.width*scale);
+      const h=Math.round(img.height*scale);
+      const c=document.createElement('canvas');
+      c.width=w;c.height=h;
+      const ctx=c.getContext('2d');
+      // White background (helps with transparent PNGs)
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img,0,0,w,h);
+      // Grayscale + contrast boost
+      const id=ctx.getImageData(0,0,w,h);
+      const d=id.data;
+      const contrast=1.6; // increase for sharper text
+      const factor=(259*(contrast*255+255))/(255*(259-contrast*255));
+      for(let i=0;i<d.length;i+=4){
+        const gray=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+        const adj=Math.max(0,Math.min(255,factor*(gray-128)+128));
+        d[i]=d[i+1]=d[i+2]=adj;
+      }
+      ctx.putImageData(id,0,0);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.src=dataUrl;
+  });
+}
+
 async function onOCRFile(e){
   const file=e.target.files[0];if(!file)return;e.target.value='';
-  loading('📸 Reading permit…');
+  if(file.type==='application/pdf'){
+    toast('PDF attached – fill fields manually or use a photo');return;
+  }
+  loading('📸 Preparing image…');
   const r=new FileReader();
   r.onload=async ev=>{
-    const dataUrl=ev.target.result;
-    if(file.type==='application/pdf'){
-      doneLoad();toast('PDF attached – fill fields manually or use a photo');
-      return;
-    }
+    const rawDataUrl=ev.target.result;
     try{
-      const res=await Tesseract.recognize(dataUrl,'eng',{
+      // Step 1: preprocess
+      document.getElementById('ovTxt').textContent='🔧 Enhancing image for OCR…';
+      const processed=await preprocessForOCR(rawDataUrl);
+
+      // Step 2: run Tesseract with optimized settings
+      document.getElementById('ovTxt').textContent='📖 Reading permit text…';
+      const worker=await Tesseract.createWorker('eng',1,{
         logger:m=>{
           if(m.status==='recognizing text')
             document.getElementById('ovTxt').textContent=
-              `Reading permit: ${Math.round(m.progress*100)}%`;
+              `📖 Reading permit: ${Math.round(m.progress*100)}%`;
         }
       });
-      parsePermit(res.data.text);
-      compress(dataUrl,1280,.82,d=>{S.photos.push({id:uid(),dataUrl:d});renderPhotos()});
-      doneLoad();toast('✅ Permit scanned — review the fields');
-    }catch(err){doneLoad();toast('OCR failed — fill in fields manually');console.error(err)}
+      await worker.setParameters({
+        tessedit_pageseg_mode:'6',   // single uniform block — best for forms
+        tessedit_char_whitelist:'',  // allow all characters
+        preserve_interword_spaces:'1'
+      });
+      const result=await worker.recognize(processed);
+      await worker.terminate();
+
+      const rawText=result.data.text;
+      const filled=parsePermit(rawText);
+
+      // Step 3: attach original photo
+      compress(rawDataUrl,1280,.82,d=>{S.photos.push({id:uid(),dataUrl:d});renderPhotos()});
+
+      doneLoad();
+      showOCRReview(rawText,filled);
+
+    }catch(err){
+      doneLoad();
+      toast('OCR failed — try a clearer photo or fill in manually');
+      console.error('OCR error:',err);
+    }
   };
   r.readAsDataURL(file);
 }
 
+/* Expanded regex parser — handles many CA city permit format variations */
 function parsePermit(txt){
-  // Permit number
-  const pn=txt.match(/(?:permit\s*(?:no\.?|number|#)?\s*[:\-]?\s*)([\w\-\/]+)/i)||txt.match(/\bEP[-\s]?[\d\-]+/i);
-  if(pn){const f=document.getElementById('fp-num');if(!f.value)f.value=(pn[1]||pn[0]).trim().substring(0,40);}
+  const filled=[];
 
-  // Permittee
-  const pe=txt.match(/(?:permittee|applicant|issued\s*to|owner)\s*[:\-]?\s*([^\n]{3,80})/i);
-  if(pe){const f=document.getElementById('fp-per');if(!f.value)f.value=pe[1].trim();}
+  // ── Permit Number ──
+  const pnPatterns=[
+    /(?:permit\s*(?:no\.?|num(?:ber)?|#)\s*[:\-#]?\s*)([\w\-\/]{3,25})/i,
+    /\b(EP[-\s]?[\d]{3,}[-\s]?[\d]*)\b/i,
+    /\b([A-Z]{1,4}[-\/]?\d{4,}[-\/]?\d*)\b/,
+    /(?:encroachment\s*permit\s*(?:no\.?|#|number)?\s*[:\-]?\s*)([\w\-\/]{3,25})/i,
+    /(?:permit\s*id|permit\s*number)\s*[:\-]?\s*([\w\-\/]{3,25})/i,
+  ];
+  for(const p of pnPatterns){
+    const m=txt.match(p);
+    if(m){const f=document.getElementById('fp-num');if(!f.value){f.value=(m[1]||m[0]).trim().substring(0,40);filled.push('Permit #');break;}}
+  }
 
-  // Location — prefer a street address pattern, fallback to labeled field
-  const la=txt.match(/\d+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Street|St|Avenue|Ave|Blvd|Boulevard|Drive|Dr|Road|Rd|Lane|Ln|Way|Court|Ct|Place|Pl)/i)
-           ||txt.match(/(?:location|address|site|work\s*site)\s*[:\-]?\s*([^\n]{5,120})/i);
-  if(la){const f=document.getElementById('fp-loc');if(!f.value)f.value=(la[1]||la[0]).trim().substring(0,150);}
+  // ── Permittee ──
+  const pePatterns=[
+    /(?:permittee|applicant|issued\s*to|permit\s*holder|contractor|owner|company\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
+    /(?:name\s*of\s*(?:applicant|permittee|contractor|owner))\s*[:\-]?\s*([^\n]{3,80})/i,
+    /(?:applicant['']?s?\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
+  ];
+  for(const p of pePatterns){
+    const m=txt.match(p);
+    if(m){const f=document.getElementById('fp-per');if(!f.value){f.value=m[1].trim().substring(0,100);filled.push('Permittee');break;}}
+  }
 
-  // Proposed work
-  const pw=txt.match(/(?:proposed\s*work|work\s*description|description\s*of\s*work|scope\s*of\s*work|nature\s*of\s*work)\s*[:\-]?\s*([\s\S]{10,400}?)(?:\n{2,}|$)/i);
-  if(pw){const f=document.getElementById('fp-work');if(!f.value)f.value=pw[1].replace(/\n/g,' ').trim().substring(0,500);}
+  // ── Contractor ──
+  const conPatterns=[
+    /(?:general\s*contractor|contractor(?!\s*license))\s*[:\-]?\s*([^\n]{3,80})/i,
+    /(?:performing\s*contractor|work\s*contractor|contractor\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
+  ];
+  for(const p of conPatterns){
+    const m=txt.match(p);
+    if(m){const f=document.getElementById('fp-con');if(!f.value){f.value=m[1].trim().substring(0,100);filled.push('Contractor');break;}}
+  }
+
+  // ── Sub-Contractor ──
+  const subPatterns=[
+    /(?:sub[-\s]?contractor|subcontractor)\s*[:\-]?\s*([^\n]{3,80})/i,
+  ];
+  for(const p of subPatterns){
+    const m=txt.match(p);
+    if(m){const f=document.getElementById('fp-sub');if(!f.value){f.value=m[1].trim().substring(0,100);filled.push('Sub-Contractor');break;}}
+  }
+
+  // ── Location ──
+  const locPatterns=[
+    /(?:work\s*location|job\s*(?:site|address)|project\s*(?:location|address)|site\s*(?:address|location)|location\s*of\s*work|address\s*of\s*work)\s*[:\-]?\s*([^\n]{5,150})/i,
+    /(?:^|[\n])(?:location|address|site)\s*[:\-]\s*([^\n]{5,150})/im,
+    /(?:at\s+or\s+near|in\s+the\s+(?:public\s+)?right.of.way\s+(?:at|on|of))\s+([^\n]{5,150})/i,
+    /\d+\s+[A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*\s+(?:Street|St\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Road|Rd\.?|Lane|Ln\.?|Way|Court|Ct\.?|Place|Pl\.?|Highway|Hwy\.?)/i,
+  ];
+  for(const p of locPatterns){
+    const m=txt.match(p);
+    if(m){const f=document.getElementById('fp-loc');if(!f.value){f.value=(m[1]||m[0]).trim().substring(0,200);filled.push('Location');break;}}
+  }
+
+  // ── Proposed Work ──
+  const workPatterns=[
+    /(?:proposed\s*work|work\s*(?:to\s*be\s*performed|description)|description\s*of\s*(?:work|activity)|scope\s*of\s*work|nature\s*of\s*work|type\s*of\s*work|activity\s*description|purpose\s*of\s*work)\s*[:\-]?\s*([\s\S]{10,500}?)(?:\n{2,}|(?=[A-Z][^a-z]{3,}:)|$)/i,
+    /(?:work\s*authorized|authorized\s*work|permit\s*(?:allows|authorizes))\s*[:\-]?\s*([\s\S]{10,400}?)(?:\n{2,}|$)/i,
+  ];
+  for(const p of workPatterns){
+    const m=txt.match(p);
+    if(m){const f=document.getElementById('fp-work');if(!f.value){f.value=m[1].replace(/\n+/g,' ').trim().substring(0,500);filled.push('Proposed Work');break;}}
+  }
+
+  return filled;
 }
+
+/* Show OCR review panel with what was extracted */
+function showOCRReview(rawText,filled){
+  document.getElementById('ocrRawText').textContent=rawText;
+  const summary=document.getElementById('ocrSummary');
+  if(filled.length===0){
+    summary.innerHTML='<span style="color:var(--red)">⚠️ No fields auto-filled — check the fields below and enter manually, or try a clearer photo.</span>';
+  } else {
+    summary.innerHTML=`<span style="color:var(--green)">✅ Auto-filled: <strong>${filled.join(', ')}</strong></span>${filled.length<4?' — check remaining fields below':''}`;
+  }
+  document.getElementById('ocrReview').classList.add('on');
+}
+function closeOCRReview(){document.getElementById('ocrReview').classList.remove('on')}
 
 /* =============================================
    WEATHER  (Open-Meteo — free, no API key)
@@ -886,6 +1049,8 @@ async function saveIns(){
     date:S.selDate,
     permitNumber:document.getElementById('fp-num').value.trim(),
     permittee:document.getElementById('fp-per').value.trim(),
+    contractor:document.getElementById('fp-con').value.trim(),
+    subContractor:document.getElementById('fp-sub').value.trim(),
     location:document.getElementById('fp-loc').value.trim(),
     proposedWork:document.getElementById('fp-work').value.trim(),
     weather:document.getElementById('fp-wx').value.trim(),
@@ -925,7 +1090,7 @@ let _autoSaveTimer=null;
 let _lastDraftSave=null;
 
 function formHasContent(){
-  return ['fp-num','fp-per','fp-loc','fp-work','fp-notes','fp-site','fp-mat','fp-lab']
+  return ['fp-num','fp-per','fp-con','fp-sub','fp-loc','fp-work','fp-notes','fp-site','fp-mat','fp-lab']
     .some(id=>{const el=document.getElementById(id);return el&&el.value.trim();})
     || S.photos.length>0;
 }
@@ -940,6 +1105,8 @@ async function saveDraft(){
     _isDraft:true,
     permitNumber:document.getElementById('fp-num').value.trim(),
     permittee:document.getElementById('fp-per').value.trim(),
+    contractor:document.getElementById('fp-con').value.trim(),
+    subContractor:document.getElementById('fp-sub').value.trim(),
     location:document.getElementById('fp-loc').value.trim(),
     proposedWork:document.getElementById('fp-work').value.trim(),
     weather:document.getElementById('fp-wx').value.trim(),
@@ -987,6 +1154,8 @@ async function checkDraft(){
   document.getElementById('formDateLbl').textContent=fmtDisplay(S.selDate);
   document.getElementById('fp-num').value=draft.permitNumber||'';
   document.getElementById('fp-per').value=draft.permittee||'';
+  document.getElementById('fp-con').value=draft.contractor||'';
+  document.getElementById('fp-sub').value=draft.subContractor||'';
   document.getElementById('fp-loc').value=draft.location||'';
   document.getElementById('fp-work').value=draft.proposedWork||'';
   document.getElementById('fp-wx').value=draft.weather||'';
@@ -1034,6 +1203,8 @@ async function viewIns(id){
         <div class="df"><label>Date</label><div class="dv">${fmtDisplay(ins.date)}</div></div>
         <div class="df"><label>Permit #</label><div class="dv">${ins.permitNumber||'—'}</div></div>
         <div class="df"><label>Permittee</label><div class="dv">${ins.permittee||'—'}</div></div>
+        <div class="df"><label>Contractor</label><div class="dv">${ins.contractor||'—'}</div></div>
+        <div class="df"><label>Sub-Contractor</label><div class="dv">${ins.subContractor||'—'}</div></div>
       </div>
       <div class="df" style="margin-top:10px"><label>Location</label><div class="dv">${ins.location||'—'}</div></div>
       <div class="df" style="margin-top:10px"><label>Proposed Work</label><div class="dv">${ins.proposedWork||'—'}</div></div>
@@ -1068,6 +1239,8 @@ async function loadToForm(id){
   document.getElementById('btnDel').style.display='';
   document.getElementById('fp-num').value=ins.permitNumber||'';
   document.getElementById('fp-per').value=ins.permittee||'';
+  document.getElementById('fp-con').value=ins.contractor||'';
+  document.getElementById('fp-sub').value=ins.subContractor||'';
   document.getElementById('fp-loc').value=ins.location||'';
   document.getElementById('fp-work').value=ins.proposedWork||'';
   document.getElementById('fp-wx').value=ins.weather||'';
@@ -1095,6 +1268,8 @@ async function copyReport(){
     '─── PERMIT INFORMATION ───',
     `Encroachment Permit #:  ${ins.permitNumber||'N/A'}`,
     `Permittee:         ${ins.permittee||'N/A'}`,
+    `Contractor:        ${ins.contractor||'N/A'}`,
+    `Sub-Contractor:    ${ins.subContractor||'N/A'}`,
     `Location:          ${ins.location||'N/A'}`,
     `Proposed Work:     ${ins.proposedWork||'N/A'}`,
     '',
