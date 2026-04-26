@@ -867,73 +867,146 @@ async function onOCRFile(e){
   r.readAsDataURL(file);
 }
 
-/* Expanded regex parser — handles many CA city permit format variations */
+/* ── CA Encroachment Permit Work Types ──────────────────────────────
+   Built from real Santa Clara permit (EP25-0617) and common CA city formats.
+   Each entry: [canonical label, ...alternate spellings OCR might produce]
+   ----------------------------------------------------------------- */
+const PERMIT_WORK_TYPES = [
+  // Santa Clara standard checkbox items
+  ['Cleanout'],
+  ['Electric', 'Electrical'],
+  ['Pothole', 'Pot Hole', 'Potholing'],
+  ['Storm Drain Lateral', 'Storm Drain Lat'],
+  ['Communication', 'Communications'],
+  ['Gas', 'Gas Line', 'Gas Main'],
+  ['Sanitary Sewer Lateral', 'San Sewer Lateral', 'SS Lateral'],
+  ['Storm Drain Main', 'Storm Drain'],
+  ['Curb & Gutter', 'Curb and Gutter', 'Curb &amp; Gutter', 'Curb/Gutter'],
+  ['Manhole', 'Man Hole'],
+  ['Sanitary Sewer Main', 'San Sewer Main', 'Sewer Main'],
+  ['Water', 'Water Main', 'Water Line'],
+  ['Curb Ramp', 'Curb Cut'],
+  ['Monitoring Well'],
+  ['Sidewalk'],
+  ['Other'],
+  ['Driveway', 'Driveway Approach'],
+  ['Pavement', 'Pavement Repair', 'Pavement Replacement'],
+  ['Soil Boring', 'Boring'],
+  // Other CA city permit types
+  ['Excavation', 'Excavate', 'Trench', 'Trenching'],
+  ['Underground Utilities', 'Underground Util'],
+  ['Street Light', 'Streetlight', 'Street Lighting'],
+  ['Traffic Signal', 'Traffic Control'],
+  ['Retaining Wall'],
+  ['Grading'],
+  ['Bore', 'Directional Bore', 'HDD'],
+  ['Survey Monument', 'Survey'],
+  ['Landscaping', 'Landscape'],
+  ['Lane Closure'],
+  ['Slurry Seal', 'Slurry'],
+  ['Overlay', 'AC Overlay'],
+];
+
+/* Look for an X marker within a short window around each known work type label.
+   OCR reads the checkbox grid in reading order, so a checked Gas box becomes
+   something like "Communication X Gas" or "x Gas" or "Gas X" in the raw text. */
+function extractCheckedWorkTypes(txt){
+  const checked=[];
+  // Normalize OCR noise: collapse whitespace, standardize common misreads
+  const norm=txt.replace(/\s+/g,' ');
+
+  for(const [canonical,...alts] of PERMIT_WORK_TYPES){
+    const labels=[canonical,...alts];
+    let found=false;
+    for(const label of labels){
+      if(found) break;
+      const esc=label.replace(/[.*+?^${}()|[\]\\&]/g,'\\$&');
+      // X appears 0–6 chars BEFORE the label
+      const before=new RegExp(`[Xx✓✗*■☑]\\s{0,6}${esc}`,'i');
+      // X appears 0–6 chars AFTER the label
+      const after=new RegExp(`${esc}\\s{0,6}[Xx✓✗*■☑]`,'i');
+      if(before.test(norm)||after.test(norm)){
+        if(!checked.includes(canonical)) checked.push(canonical);
+        found=true;
+      }
+    }
+  }
+  return checked;
+}
+
+/* Main permit parser — tuned to real CA city encroachment permit layout */
 function parsePermit(txt){
   const filled=[];
+  // Normalize for matching (keep original for field values)
+  const n=txt.replace(/\r/g,'');
 
   // ── Permit Number ──
+  // Santa Clara labels it "PERMIT NO." with value on same line
   const pnPatterns=[
+    /PERMIT\s+NO\.?\s*[:\-]?\s*([\w\-\/]{3,25})/i,          // PERMIT NO. EP25-0617
     /(?:permit\s*(?:no\.?|num(?:ber)?|#)\s*[:\-#]?\s*)([\w\-\/]{3,25})/i,
-    /\b(EP[-\s]?[\d]{3,}[-\s]?[\d]*)\b/i,
-    /\b([A-Z]{1,4}[-\/]?\d{4,}[-\/]?\d*)\b/,
-    /(?:encroachment\s*permit\s*(?:no\.?|#|number)?\s*[:\-]?\s*)([\w\-\/]{3,25})/i,
-    /(?:permit\s*id|permit\s*number)\s*[:\-]?\s*([\w\-\/]{3,25})/i,
+    /\b(EP[-\s]?\d{2,4}[-\s]\d{2,6})\b/i,                   // EP25-0617 format
+    /\b(EP[-\s]?\d{4,})\b/i,
+    /(?:encroachment\s*permit\s*(?:no\.?|#)?\s*[:\-]?\s*)([\w\-\/]{3,25})/i,
+    /\b([A-Z]{1,4}[-\/]\d{2,4}[-\/]\d{2,6})\b/,             // XX-YYYY-NNNN formats
   ];
   for(const p of pnPatterns){
-    const m=txt.match(p);
-    if(m){const f=document.getElementById('fp-num');if(!f.value){f.value=(m[1]||m[0]).trim().substring(0,40);filled.push('Permit #');break;}}
+    const m=n.match(p);
+    if(m){const v=(m[1]||m[0]).trim();
+      // Skip obvious non-permit values
+      if(v.length>=3&&!/^(N\/A|NA|YES|NO|TEL|FAX)$/i.test(v)){
+        const f=document.getElementById('fp-num');if(!f.value){f.value=v.substring(0,40);filled.push('Permit #');break;}
+      }
+    }
   }
 
   // ── Permittee ──
   const pePatterns=[
-    /(?:permittee|applicant|issued\s*to|permit\s*holder|contractor|owner|company\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
-    /(?:name\s*of\s*(?:applicant|permittee|contractor|owner))\s*[:\-]?\s*([^\n]{3,80})/i,
-    /(?:applicant['']?s?\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
+    /PERMITTEE\s*[:\-]?\s*([^\n]{3,80})/i,                   // PERMITTEE: label (exact)
+    /(?:applicant|issued\s*to|permit\s*holder|owner|company\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
+    /(?:name\s*of\s*(?:applicant|permittee|owner))\s*[:\-]?\s*([^\n]{3,80})/i,
   ];
   for(const p of pePatterns){
-    const m=txt.match(p);
-    if(m){const f=document.getElementById('fp-per');if(!f.value){f.value=m[1].trim().substring(0,100);filled.push('Permittee');break;}}
-  }
-
-  // ── Contractor ──
-  const conPatterns=[
-    /(?:general\s*contractor|contractor(?!\s*license))\s*[:\-]?\s*([^\n]{3,80})/i,
-    /(?:performing\s*contractor|work\s*contractor|contractor\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
-  ];
-  for(const p of conPatterns){
-    const m=txt.match(p);
-    if(m){const f=document.getElementById('fp-con');if(!f.value){f.value=m[1].trim().substring(0,100);filled.push('Contractor');break;}}
-  }
-
-  // ── Sub-Contractor ──
-  const subPatterns=[
-    /(?:sub[-\s]?contractor|subcontractor)\s*[:\-]?\s*([^\n]{3,80})/i,
-  ];
-  for(const p of subPatterns){
-    const m=txt.match(p);
-    if(m){const f=document.getElementById('fp-sub');if(!f.value){f.value=m[1].trim().substring(0,100);filled.push('Sub-Contractor');break;}}
+    const m=n.match(p);
+    if(m){const v=m[1].trim();
+      if(v.length>=2&&!/^(N\/A|NA|YES|NO)$/i.test(v)){
+        const f=document.getElementById('fp-per');if(!f.value){f.value=v.substring(0,100);filled.push('Permittee');break;}
+      }
+    }
   }
 
   // ── Location ──
   const locPatterns=[
-    /(?:work\s*location|job\s*(?:site|address)|project\s*(?:location|address)|site\s*(?:address|location)|location\s*of\s*work|address\s*of\s*work)\s*[:\-]?\s*([^\n]{5,150})/i,
+    /LOCATION\s+OF\s+WORK\s*[:\-]?\s*([^\n]{3,150})/i,      // Santa Clara exact label
+    /(?:work\s*location|job\s*(?:site|address)|project\s*(?:location|address)|site\s*(?:address|location)|address\s*of\s*work)\s*[:\-]?\s*([^\n]{5,150})/i,
     /(?:^|[\n])(?:location|address|site)\s*[:\-]\s*([^\n]{5,150})/im,
-    /(?:at\s+or\s+near|in\s+the\s+(?:public\s+)?right.of.way\s+(?:at|on|of))\s+([^\n]{5,150})/i,
-    /\d+\s+[A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*\s+(?:Street|St\.?|Avenue|Ave\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Road|Rd\.?|Lane|Ln\.?|Way|Court|Ct\.?|Place|Pl\.?|Highway|Hwy\.?)/i,
+    /\d+\s+[A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*\s+(?:Street|St\.?|Avenue|Ave\.?|Av\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Road|Rd\.?|Lane|Ln\.?|Way|Court|Ct\.?|Place|Pl\.?|Highway|Hwy\.?|Parkway|Pkwy\.?)/i,
   ];
   for(const p of locPatterns){
-    const m=txt.match(p);
-    if(m){const f=document.getElementById('fp-loc');if(!f.value){f.value=(m[1]||m[0]).trim().substring(0,200);filled.push('Location');break;}}
+    const m=n.match(p);
+    if(m){const v=(m[1]||m[0]).trim();
+      if(v.length>=3&&!/^(N\/A|NA|,\s*)$/.test(v)){
+        const f=document.getElementById('fp-loc');if(!f.value){f.value=v.substring(0,200);filled.push('Location');break;}
+      }
+    }
   }
 
-  // ── Proposed Work ──
-  const workPatterns=[
-    /(?:proposed\s*work|work\s*(?:to\s*be\s*performed|description)|description\s*of\s*(?:work|activity)|scope\s*of\s*work|nature\s*of\s*work|type\s*of\s*work|activity\s*description|purpose\s*of\s*work)\s*[:\-]?\s*([\s\S]{10,500}?)(?:\n{2,}|(?=[A-Z][^a-z]{3,}:)|$)/i,
-    /(?:work\s*authorized|authorized\s*work|permit\s*(?:allows|authorizes))\s*[:\-]?\s*([\s\S]{10,400}?)(?:\n{2,}|$)/i,
-  ];
-  for(const p of workPatterns){
-    const m=txt.match(p);
-    if(m){const f=document.getElementById('fp-work');if(!f.value){f.value=m[1].replace(/\n+/g,' ').trim().substring(0,500);filled.push('Proposed Work');break;}}
+  // ── Proposed Work — checkbox grid detection ──────────────────────
+  // Strategy 1: match known work type labels with adjacent X marker
+  const checkedTypes=extractCheckedWorkTypes(n);
+  if(checkedTypes.length>0){
+    const f=document.getElementById('fp-work');
+    if(!f.value){f.value=checkedTypes.join(', ');filled.push('Proposed Work');}
+  } else {
+    // Strategy 2: text-block fallback (for permits with written descriptions)
+    const workPatterns=[
+      /(?:proposed\s*work|work\s*(?:to\s*be\s*performed|description)|description\s*of\s*(?:work|activity)|scope\s*of\s*work|nature\s*of\s*work|type\s*of\s*work|activity\s*description|purpose\s*of\s*work)\s*[:\-]?\s*([\s\S]{10,500}?)(?:\n{2,}|(?=[A-Z]{3,}[^a-z]*:)|$)/i,
+      /(?:work\s*authorized|authorized\s*work)\s*[:\-]?\s*([\s\S]{10,400}?)(?:\n{2,}|$)/i,
+    ];
+    for(const p of workPatterns){
+      const m=n.match(p);
+      if(m){const f=document.getElementById('fp-work');if(!f.value){f.value=m[1].replace(/\n+/g,' ').trim().substring(0,500);filled.push('Proposed Work');break;}}
+    }
   }
 
   return filled;
