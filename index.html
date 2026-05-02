@@ -6,11 +6,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Field Inspector">
+<meta name="apple-mobile-web-app-title" content="MyFieldStack">
 <meta name="theme-color" content="#1e3a5f">
 <link rel="manifest" href="manifest.json">
-<title>Field Inspector</title>
+<title>MyFieldStack</title>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* =============================================
    RESET & VARIABLES
@@ -59,6 +60,44 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
   cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 .ico-btn:active{opacity:.6}
+
+/* =============================================
+   LOGIN SCREEN
+============================================= */
+.login-body{
+  flex:1;overflow-y:auto;display:flex;
+  align-items:center;justify-content:center;
+  padding:24px 20px;background:var(--bg);
+}
+.login-card{
+  background:var(--card);border-radius:16px;
+  padding:28px 24px;width:100%;max-width:400px;
+  box-shadow:0 4px 24px rgba(0,0,0,.1);
+}
+.login-card h2{font-size:22px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.login-sub{font-size:14px;color:var(--muted);margin-bottom:24px}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:6px}
+.login-field input{
+  width:100%;padding:12px 14px;border:1px solid var(--border);
+  border-radius:10px;font-size:16px;font-family:inherit;
+  outline:none;color:var(--text);background:var(--bg);
+}
+.login-field input:focus{border-color:var(--blue)}
+.auth-err{font-size:13px;color:var(--red);margin-bottom:12px;min-height:18px;line-height:1.4}
+.login-btn{
+  width:100%;padding:14px;background:var(--navy);color:#fff;
+  border:none;border-radius:10px;font-size:16px;font-weight:600;
+  cursor:pointer;margin-bottom:12px;
+}
+.login-btn:active{opacity:.85}
+.login-toggle{
+  width:100%;padding:10px;background:none;border:none;
+  font-size:14px;color:var(--blue);cursor:pointer;text-decoration:underline;
+}
+.login-logo{font-size:42px;margin-bottom:6px;text-align:center}
+.login-app-name{font-size:24px;font-weight:800;color:var(--navy);text-align:center;margin-bottom:4px}
+.login-tagline{font-size:13px;color:var(--muted);text-align:center;margin-bottom:28px}
 
 /* =============================================
    CALENDAR SCREEN
@@ -141,13 +180,6 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .frow{display:grid;grid-template-columns:1fr 1fr}
 .frow .fld:first-child{border-right:1px solid var(--border)}
 
-/* date badge in form */
-.date-badge{
-  display:flex;align-items:center;gap:8px;padding:10px 14px;
-  background:var(--bg);border-radius:8px;margin:0 14px 0;font-size:14px;font-weight:600;color:var(--navy);
-}
-
-/* buttons inside form */
 .scan-btn{
   margin:10px 14px 0;padding:11px;background:var(--navy);
   color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;
@@ -165,7 +197,6 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 }
 .wx-btn:active{opacity:.75}
 
-/* photo grid */
 .ph-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:8px}
 .ph-wrap{position:relative}
 .ph-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;display:block}
@@ -183,7 +214,6 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 }
 .ph-add .pi{font-size:22px}
 
-/* voice */
 .rec-ind{
   display:none;align-items:center;gap:6px;
   padding:6px 14px;background:#ffe8e8;border-radius:6px;
@@ -202,7 +232,6 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .btn-rec.go{background:var(--navy);color:#fff}
 .btn-rec.stop{background:var(--red);color:#fff}
 
-/* save bar */
 .save-bar{
   position:sticky;bottom:0;background:#fff;
   border-top:1px solid var(--border);padding:10px 14px;
@@ -220,7 +249,6 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .det-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .df label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
 .df .dv{font-size:15px;color:var(--text);margin-top:2px;white-space:pre-wrap;line-height:1.5}
-/* det-photos grid now handled by .det-ph-wrap above */
 
 .copy-bar{
   position:sticky;bottom:0;background:#fff;
@@ -228,6 +256,11 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 }
 .btn-copy{flex:1;padding:13px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
 .btn-edit{padding:13px 16px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+
+.det-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
+.det-ph-wrap{position:relative}
+.det-ph-wrap img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;display:block}
+.det-ph-share{position:absolute;bottom:4px;right:4px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
 /* =============================================
    LOADING, TOAST, MODAL
@@ -254,7 +287,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .modal.on{display:flex}
 .modal img{max-width:100%;max-height:calc(100% - 80px);object-fit:contain;flex:1}
 .modal-x{position:absolute;top:16px;right:16px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);color:#fff;border:none;font-size:20px;cursor:pointer}
-/* OCR review panel */
+
 .ocr-review{
   display:none;position:fixed;inset:0;z-index:2500;
   background:rgba(0,0,0,.5);align-items:flex-end;justify-content:center;
@@ -271,7 +304,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .ocr-raw{font-size:11px;font-family:monospace;white-space:pre-wrap;color:var(--muted);line-height:1.5}
 .ocr-toggle{font-size:13px;color:var(--blue);text-decoration:underline;cursor:pointer;padding:8px 16px 0;display:block}
 .ocr-close{margin:12px 16px 0;padding:13px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;width:calc(100% - 32px)}
-/* photo share prompt */
+
 .ph-prompt{
   display:none;position:fixed;bottom:0;left:0;right:0;z-index:2500;
   background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 32px;
@@ -284,15 +317,11 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .ph-prompt-btns button{flex:1;padding:13px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer}
 .ph-prompt-share{background:var(--blue);color:#fff}
 .ph-prompt-dismiss{background:var(--bg);color:var(--text)}
+
 .modal-bar{display:flex;gap:10px;padding:12px 16px;width:100%;justify-content:center;flex-shrink:0}
 .modal-btn{padding:11px 22px;border-radius:10px;border:none;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px}
 .modal-btn.share{background:var(--blue);color:#fff}
 .modal-btn.dl{background:rgba(255,255,255,.15);color:#fff}
-/* photo share overlay in detail */
-.det-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:8px}
-.det-ph-wrap{position:relative}
-.det-ph-wrap img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;cursor:pointer;display:block}
-.det-ph-share{position:absolute;bottom:4px;right:4px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 </style>
 </head>
 <body>
@@ -301,16 +330,16 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <!-- LOADING OVERLAY -->
 <div class="overlay" id="ov">
   <div class="spin"></div>
-  <div class="ld-txt" id="ovTxt">Processing…</div>
+  <div class="ld-txt" id="ovTxt">Processingâ¦</div>
 </div>
 
 <!-- PHOTO MODAL -->
 <div class="modal" id="phModal">
-  <button class="modal-x" onclick="closeModal()">✕</button>
+  <button class="modal-x" onclick="closeModal()">â</button>
   <img id="phModalImg" src="" alt="">
   <div class="modal-bar">
-    <button class="modal-btn share" onclick="shareCurrentPhoto()">⬆️&nbsp; Share</button>
-    <button class="modal-btn dl" onclick="downloadCurrentPhoto()">⬇️&nbsp; Save</button>
+    <button class="modal-btn share" onclick="shareCurrentPhoto()">â¬ï¸&nbsp; Share</button>
+    <button class="modal-btn dl" onclick="downloadCurrentPhoto()">â¬ï¸&nbsp; Save</button>
   </div>
 </div>
 
@@ -320,41 +349,73 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <!-- OCR REVIEW PANEL -->
 <div class="ocr-review" id="ocrReview">
   <div class="ocr-inner">
-    <h3>📄 Permit Scan Results</h3>
+    <h3>ð Permit Scan Results</h3>
     <div class="ocr-summary" id="ocrSummary"></div>
     <span class="ocr-toggle" onclick="document.getElementById('ocrRawWrap').style.display=document.getElementById('ocrRawWrap').style.display==='none'?'block':'none'">Show / hide raw extracted text</span>
     <div class="ocr-raw-wrap" id="ocrRawWrap" style="display:none">
       <div class="ocr-raw" id="ocrRawText"></div>
     </div>
-    <button class="ocr-close" onclick="closeOCRReview()">Got it — review the fields above</button>
+    <button class="ocr-close" onclick="closeOCRReview()">Got it â review the fields above</button>
   </div>
 </div>
 
 <!-- PHOTO SHARE PROMPT -->
 <div class="ph-prompt" id="photoPrompt">
-  <h3>📋 Report text copied!</h3>
-  <p>Photos can't be pasted as text — tap below to share your <strong><span id="photoPromptCount">0</span> photo(s)</strong> directly to eBuilder or save them to your camera roll.</p>
+  <h3>ð Report text copied!</h3>
+  <p>Photos can't be pasted as text â tap below to share your <strong><span id="photoPromptCount">0</span> photo(s)</strong> directly to eBuilder or save them to your camera roll.</p>
   <div class="ph-prompt-btns">
-    <button class="ph-prompt-share" onclick="hidePhotoPrompt();shareAllPhotos()">📤 Share Photos</button>
-    <button class="ph-prompt-dismiss" onclick="hidePhotoPrompt();toast('📋 Report copied — paste into eBuilder')">Done</button>
+    <button class="ph-prompt-share" onclick="hidePhotoPrompt();shareAllPhotos()">ð¤ Share Photos</button>
+    <button class="ph-prompt-dismiss" onclick="hidePhotoPrompt();toast('ð Report copied â paste into eBuilder')">Done</button>
+  </div>
+</div>
+
+<!-- ==================== LOGIN SCREEN ==================== -->
+<div class="screen active" id="s-login">
+  <div class="hdr">
+    <span style="font-size:22px">ð</span>
+    <div>
+      <h1>MyFieldStack</h1>
+      <div class="sub">Field Inspection Log</div>
+    </div>
+  </div>
+  <div class="login-body">
+    <div class="login-card">
+      <div class="login-logo">ð</div>
+      <div class="login-app-name">MyFieldStack</div>
+      <div class="login-tagline">Field Inspection Log</div>
+      <h2 id="authTitle">Sign In</h2>
+      <p class="login-sub" id="authSub">Enter your credentials to continue</p>
+      <div class="login-field">
+        <label>Email</label>
+        <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email" onkeydown="if(event.key==='Enter')authSubmit()">
+      </div>
+      <div class="login-field">
+        <label>Password</label>
+        <input type="password" id="authPass" placeholder="â¢â¢â¢â¢â¢â¢â¢â¢" autocomplete="current-password" onkeydown="if(event.key==='Enter')authSubmit()">
+      </div>
+      <div class="auth-err" id="authErr"></div>
+      <button class="login-btn" onclick="authSubmit()" id="authSubmitBtn">Sign In</button>
+      <button class="login-toggle" onclick="toggleAuthMode()" id="authToggle">Don't have an account? Sign Up</button>
+    </div>
   </div>
 </div>
 
 <!-- ==================== CALENDAR SCREEN ==================== -->
-<div class="screen active" id="s-cal">
+<div class="screen" id="s-cal">
 
   <div class="hdr">
-    <span style="font-size:22px">📋</span>
-    <div>
-      <h1>Field Inspector</h1>
+    <span style="font-size:22px">ð</span>
+    <div style="flex:1;min-width:0">
+      <h1>MyFieldStack</h1>
       <div class="sub" id="calSubtitle"></div>
     </div>
+    <button class="ico-btn" onclick="signOut()" title="Sign out" style="font-size:16px">â»</button>
   </div>
 
   <div class="cal-nav">
-    <button class="ico-btn" onclick="prevMo()">‹</button>
+    <button class="ico-btn" onclick="prevMo()">â¹</button>
     <h2 id="moLbl"></h2>
-    <button class="ico-btn" onclick="nextMo()">›</button>
+    <button class="ico-btn" onclick="nextMo()">âº</button>
   </div>
 
   <div class="cal-grid">
@@ -376,7 +437,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <!-- ==================== FORM SCREEN ==================== -->
 <div class="screen" id="s-form">
   <div class="hdr">
-    <button class="ico-btn" onclick="goHome()">‹</button>
+    <button class="ico-btn" onclick="goHome()">â¹</button>
     <div style="flex:1;min-width:0">
       <h1 id="formTitle">New Inspection</h1>
       <div id="draftBadge" style="display:none;font-size:11px;opacity:.75;margin-top:1px"></div>
@@ -389,7 +450,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
     <!-- Date display -->
     <div class="fsec" style="margin-bottom:14px">
       <div class="fld" style="display:flex;align-items:center;gap:10px">
-        <span style="font-size:20px">📅</span>
+        <span style="font-size:20px">ð</span>
         <div>
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:2px">Inspection Date</div>
           <div id="formDateLbl" style="font-size:16px;font-weight:600;color:var(--navy)"></div>
@@ -399,8 +460,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
     <!-- PERMIT INFO -->
     <div class="fsec">
-      <div class="fsec-hdr">📄 Encroachment Permit</div>
-      <button class="scan-btn" onclick="triggerOCR()">📸&nbsp; Scan Permit – Auto-Fill Fields</button>
+      <div class="fsec-hdr">ð Encroachment Permit</div>
+      <button class="scan-btn" onclick="triggerOCR()">ð¸&nbsp; Scan Permit â Auto-Fill Fields</button>
       <div style="height:8px"></div>
       <div class="fld">
         <label>Permit Number</label>
@@ -424,14 +485,14 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
       </div>
       <div class="fld">
         <label>Proposed Work</label>
-        <textarea id="fp-work" placeholder="Describe the permitted work…"></textarea>
+        <textarea id="fp-work" placeholder="Describe the permitted workâ¦"></textarea>
       </div>
     </div>
 
     <!-- CONDITIONS -->
     <div class="fsec">
-      <div class="fsec-hdr">🌤 Field Conditions</div>
-      <button class="wx-btn" onclick="getWeather()">🌐&nbsp; Auto-Fill Weather</button>
+      <div class="fsec-hdr">ð¤ Field Conditions</div>
+      <button class="wx-btn" onclick="getWeather()">ð&nbsp; Auto-Fill Weather</button>
       <div style="height:6px"></div>
       <div class="fld">
         <label>Weather</label>
@@ -439,21 +500,21 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
       </div>
       <div class="frow">
         <div class="fld">
-          <label>High Temp (°F)</label>
-          <input type="number" id="fp-hi" placeholder="—">
+          <label>High Temp (Â°F)</label>
+          <input type="number" id="fp-hi" placeholder="â">
         </div>
         <div class="fld">
-          <label>Low Temp (°F)</label>
-          <input type="number" id="fp-lo" placeholder="—">
+          <label>Low Temp (Â°F)</label>
+          <input type="number" id="fp-lo" placeholder="â">
         </div>
       </div>
       <div class="fld">
         <label>Site Condition</label>
-        <textarea id="fp-site" placeholder="Describe current site conditions…"></textarea>
+        <textarea id="fp-site" placeholder="Describe current site conditionsâ¦"></textarea>
       </div>
       <div class="fld">
         <label>Material Delivery</label>
-        <textarea id="fp-mat" placeholder="Materials received on site…"></textarea>
+        <textarea id="fp-mat" placeholder="Materials received on siteâ¦"></textarea>
       </div>
       <div class="fld">
         <label>Labor Force</label>
@@ -463,32 +524,32 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
     <!-- PHOTOS -->
     <div class="fsec">
-      <div class="fsec-hdr">📷 Photos</div>
+      <div class="fsec-hdr">ð· Photos</div>
       <div class="ph-grid" id="phGrid">
         <button class="ph-add" onclick="addPhoto()">
-          <span class="pi">📷</span><span>Add Photo</span>
+          <span class="pi">ð·</span><span>Add Photo</span>
         </button>
       </div>
     </div>
 
     <!-- NOTES -->
     <div class="fsec">
-      <div class="fsec-hdr">📝 Inspection Notes</div>
-      <div class="rec-ind" id="recInd"><div class="rec-dot"></div> Recording…</div>
+      <div class="fsec-hdr">ð Inspection Notes</div>
+      <div class="rec-ind" id="recInd"><div class="rec-dot"></div> Recordingâ¦</div>
       <div class="vc">
-        <button class="btn-rec go" id="btnRec" onclick="toggleRec()">🎤&nbsp; Start Dictating</button>
+        <button class="btn-rec go" id="btnRec" onclick="toggleRec()">ð¤&nbsp; Start Dictating</button>
       </div>
       <div class="fld">
         <label>Notes</label>
-        <textarea id="fp-notes" placeholder="Dictate or type inspection notes here…" style="min-height:110px"></textarea>
+        <textarea id="fp-notes" placeholder="Dictate or type inspection notes hereâ¦" style="min-height:110px"></textarea>
       </div>
     </div>
 
   </div><!-- /form-body -->
 
   <div class="save-bar">
-    <button class="btn-save" onclick="saveIns()">💾&nbsp; Save Inspection</button>
-    <button class="btn-del" id="btnDel" onclick="delIns()" style="display:none">🗑</button>
+    <button class="btn-save" onclick="saveIns()">ð¾&nbsp; Save Inspection</button>
+    <button class="btn-del" id="btnDel" onclick="delIns()" style="display:none">ð</button>
   </div>
 
   <!-- Hidden file inputs -->
@@ -499,21 +560,28 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 <!-- ==================== DETAIL SCREEN ==================== -->
 <div class="screen" id="s-det">
   <div class="hdr">
-    <button class="ico-btn" onclick="goHome()">‹</button>
+    <button class="ico-btn" onclick="goHome()">â¹</button>
     <h1 id="detTitle">Inspection</h1>
     <div style="width:36px"></div>
   </div>
   <div class="det-body" id="detBody"></div>
   <div class="copy-bar">
-    <button class="btn-copy" onclick="copyReport()">📋&nbsp; Copy for eBuilder</button>
-    <button class="btn-edit" id="btnShareAll" onclick="shareAllPhotos()" style="background:var(--blue)">📤</button>
-    <button class="btn-edit" onclick="editCurrent()">✏️</button>
+    <button class="btn-copy" onclick="copyReport()">ð&nbsp; Copy for eBuilder</button>
+    <button class="btn-edit" id="btnShareAll" onclick="shareAllPhotos()" style="background:var(--blue)">ð¤</button>
+    <button class="btn-edit" onclick="editCurrent()">âï¸</button>
   </div>
 </div>
 
 </div><!-- /app -->
 
 <script>
+/* =============================================
+   SUPABASE INIT
+============================================= */
+const SUPA_URL = 'https://rlohcwerwrjcicxnudvo.supabase.co';
+const SUPA_KEY = 'sb_publishable__O58nnHqqZ6TWgLYnpZkOA_oEoHe9xD';
+const supabase = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
 /* =============================================
    UTILITIES
 ============================================= */
@@ -534,7 +602,7 @@ function toast(msg,ms=2800){
   el.textContent=msg;el.classList.add('on');
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),ms);
 }
-function loading(msg='Processing…'){
+function loading(msg='Processingâ¦'){
   document.getElementById('ovTxt').textContent=msg;
   document.getElementById('ov').classList.add('on');
 }
@@ -548,7 +616,6 @@ function openModal(src){
 }
 function closeModal(){document.getElementById('phModal').classList.remove('on');_modalSrc='';}
 
-// Share a single photo via native share sheet (iOS/Android) or download on desktop
 async function sharePhoto(dataUrl, filename='inspection-photo.jpg'){
   try{
     const res=await fetch(dataUrl);
@@ -557,7 +624,6 @@ async function sharePhoto(dataUrl, filename='inspection-photo.jpg'){
     if(navigator.canShare&&navigator.canShare({files:[file]})){
       await navigator.share({files:[file],title:'Inspection Photo'});
     } else {
-      // fallback: download
       _downloadBlob(dataUrl,filename);
       toast('Photo saved');
     }
@@ -580,12 +646,10 @@ function _downloadBlob(dataUrl,filename){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 
-// Share ALL photos from current inspection as individual files
-async function shareAllPhotos(){
+an	nc function shareAllPhotos(){
   const ins=await DB.get(S.curId);
   if(!ins||!ins.photos||!ins.photos.length){toast('No photos to share');return;}
   if(ins.photos.length===1){sharePhoto(ins.photos[0].dataUrl,'inspection-photo-1.jpg');return;}
-  // Multi-file share if supported
   try{
     const files=await Promise.all(ins.photos.map(async(p,i)=>{
       const res=await fetch(p.dataUrl);
@@ -595,12 +659,11 @@ async function shareAllPhotos(){
     if(navigator.canShare&&navigator.canShare({files})){
       await navigator.share({files,title:`Inspection Photos (${files.length})`});
     } else {
-      // fallback: download each
       ins.photos.forEach((p,i)=>_downloadBlob(p.dataUrl,`inspection-photo-${i+1}.jpg`));
       toast(`${ins.photos.length} photos saved`);
     }
   }catch(e){
-    if(e.name!=='AbortError') toast('Could not share — try individual photos');
+    if(e.name!=='AbortError') toast('Could not share â try individual photos');
   }
 }
 
@@ -611,54 +674,202 @@ const S={
   month:today.getMonth(),
   year:today.getFullYear(),
   selDate:fmtDate(today),
-  curId:null,          // editing inspection id
-  photos:[],           // [{id,dataUrl}] for form
+  curId:null,
+  photos:[],
   activeDates:new Set(),
   rec:null,
   recOn:false
 };
 
 /* =============================================
-   DATABASE (IndexedDB)
+   DRAFT DB  (IndexedDB â local only, for auto-save)
 ============================================= */
-const DB=(()=>{
+const DraftDB=(()=>{
   let db=null;
-  const NAME='FieldInspector',VER=1;
   async function init(){
     return new Promise((ok,fail)=>{
-      const r=indexedDB.open(NAME,VER);
+      const r=indexedDB.open('MFSDraft',1);
       r.onupgradeneeded=e=>{
         const d=e.target.result;
-        if(!d.objectStoreNames.contains('ins')){
-          const st=d.createObjectStore('ins',{keyPath:'id'});
-          st.createIndex('date','date',{unique:false});
-        }
+        if(!d.objectStoreNames.contains('drafts'))
+          d.createObjectStore('drafts',{keyPath:'id'});
       };
       r.onsuccess=e=>{db=e.target.result;ok()};
       r.onerror=e=>fail(e.target.error);
     });
   }
-  function tx(wr){return db.transaction('ins',wr?'readwrite':'readonly').objectStore('ins')}
+  function tx(wr){return db.transaction('drafts',wr?'readwrite':'readonly').objectStore('drafts')}
   function p(r){return new Promise((ok,fail)=>{r.onsuccess=()=>ok(r.result);r.onerror=()=>fail(r.error)})}
-  const getAll=()=>p(tx().getAll()).then(r=>r||[]);
-  const byDate=dt=>p(tx().index('date').getAll(dt)).then(r=>r||[]);
-  const get=id=>p(tx().get(id));
-  const save=item=>p(tx(1).put(item));
-  const del=id=>p(tx(1).delete(id));
-  const activeDates=async()=>{const a=await getAll();return new Set(a.map(i=>i.date))};
-  return{init,getAll,byDate,get,save,del,activeDates};
+  return{
+    init,
+    get:id=>p(tx().get(id)),
+    save:item=>p(tx(1).put(item)),
+    del:id=>p(tx(1).delete(id))
+  };
 })();
+
+/* =============================================
+   DATABASE  (Supabase)
+============================================= */
+function insToRow(ins){
+  return{
+    id:ins.id,
+    date:ins.date,
+    permit_number:ins.permitNumber||null,
+    permittee:ins.permittee||null,
+    contractor:ins.contractor||null,
+    sub_contractor:ins.subContractor||null,
+    location:ins.location||null,
+    proposed_work:ins.proposedWork||null,
+    weather:ins.weather||null,
+    temp_high:ins.tempHigh?parseFloat(ins.tempHigh):null,
+    temp_low:ins.tempLow?parseFloat(ins.tempLow):null,
+    site_condition:ins.siteCondition||null,
+    material_delivery:ins.materialDelivery||null,
+    labor_force:ins.laborForce||null,
+    notes:ins.notes||null,
+    photo_paths:ins.photos||[]
+  };
+}
+
+function rowToIns(row){
+  return{
+    id:row.id,
+    date:row.date,
+    permitNumber:row.permit_number||'',
+    permittee:row.permittee||'',
+    contractor:row.contractor||'',
+    subContractor:row.sub_contractor||'',
+    location:row.location||'',
+    proposedWork:row.proposed_work||'',
+    weather:row.weather||'',
+    tempHigh:row.temp_high,
+    tempLow:row.temp_low,
+    siteCondition:row.site_condition||'',
+    materialDelivery:row.material_delivery||'',
+    laborForce:row.labor_force||'',
+    notes:row.notes||'',
+    photos:row.photo_paths||[],
+    createdAt:row.created_at,
+    updatedAt:row.updated_at
+  };
+}
+
+const DB={
+  async getAll(){
+    const{data,error}=await supabase.from('inspections').select('*').order('date',{ascending:false});
+    if(error){console.error('DB.getAll:',error);return[];}
+    return data.map(rowToIns);
+  },
+  async byDate(dt){
+    const{data,error}=await supabase.from('inspections').select('*').eq('date',dt);
+    if(error){console.error('DB.byDate:',error);return[];}
+    return data.map(rowToIns);
+  },
+  async get(id){
+    const{data,error}=await supabase.from('inspections').select('*').eq('id',id).single();
+    if(error)return null;
+    return rowToIns(data);
+  },
+  async save(ins){
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)throw new Error('Not authenticated');
+    const row={...insToRow(ins),user_id:user.id};
+    const{error}=await supabase.from('inspections').upsert(row);
+    if(error)throw error;
+  },
+  async del(id){
+    const{error}=await supabase.from('inspections').delete().eq('id',id);
+    if(error)throw error;
+  },
+  async activeDates(){
+    const{data,error}=await supabase.from('inspections').select('date');
+    if(error)return new Set();
+    return new Set(data.map(r=>r.date));
+  }
+};
+
+/* =============================================
+   AUTH
+============================================= */
+let _authMode='signin';
+
+function toggleAuthMode(){
+  _authMode=_authMode==='signin'?'signup':'signin';
+  const isSignIn=_authMode==='signin';
+  document.getElementById('authTitle').textContent=isSignIn?'Sign In':'Create Account';
+  document.getElementById('authSub').textContent=isSignIn?'Enter your credentials to continue':'Create your MyFieldStack account';
+  document.getElementById('authSubmitBtn').textContent=isSignIn?'Sign In':'Create Account';
+  document.getElementById('authToggle').textContent=isSignIn?"Don't have an account? Sign Up":'Already have an account? Sign In';
+  document.getElementById('authErr').textContent='';
+  document.getElementById('authErr').style.color='var(--red)';
+}
+
+async function authSubmit(){
+  const email=document.getElementById('authEmail').value.trim();
+  const pass=document.getElementById('authPass').value;
+  const errEl=document.getElementById('authErr');
+  errEl.textContent='';
+  errEl.style.color='var(--red)';
+  if(!email||!pass){errEl.textContent='Please enter your email and password';return;}
+  loading(_authMode==='signin'?'Signing inâ¦':'Creating accountâ¦');
+  try{
+    let result;
+    if(_authMode==='signin'){
+      result=await supabase.auth.signInWithPassword({email,password:pass});
+    }else{
+      result=await supabase.auth.signUp({email,password:pass});
+    }
+    doneLoad();
+    if(result.error){errEl.textContent=result.error.message;return;}
+    // Sign-up with email confirmation required
+    if(_authMode==='signup'&&result.data.user&&!result.data.session){
+      errEl.style.color='var(--green)';
+      errEl.textContent='â Check your email to confirm your account, then sign in.';
+      return;
+    }
+    showScreen('cal');
+    await appInit();
+  }catch(e){
+    doneLoad();
+    errEl.textContent='Something went wrong. Please try again.';
+    console.error('Auth error:',e);
+  }
+}
+
+async function signOut(){
+  if(!confirm('Sign out of MyFieldStack?'))return;
+  stopRec();stopAutoSave();
+  await supabase.auth.signOut();
+  S.activeDates=new Set();
+  S.curId=null;S.photos=[];
+  document.getElementById('authEmail').value='';
+  document.getElementById('authPass').value='';
+  document.getElementById('authErr').textContent='';
+  _authMode='signin';
+  document.getElementById('authTitle').textContent='Sign In';
+  document.getElementById('authSubmitBtn').textContent='Sign In';
+  document.getElementById('authToggle').textContent="Don't have an account? Sign Up";
+  showScreen('login');
+  toast('Signed out');
+}
 
 /* =============================================
    CALENDAR
 ============================================= */
 function renderCal(){
-  const {month,year,selDate}=S;
+  const{month,year,selDate}=S;
   const todStr=fmtDate(today);
   document.getElementById('moLbl').textContent=
     new Date(year,month,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
-  document.getElementById('calSubtitle').textContent=
-    selDate===todStr?'Today':'Viewing: '+fmtDisplay(selDate).split(',')[0]+fmtDisplay(selDate).slice(fmtDisplay(selDate).indexOf(','));
+
+  // Show user email as subtitle
+  supabase.auth.getUser().then(({data:{user}})=>{
+    if(user){
+      const sub=document.getElementById('calSubtitle');
+      if(sub)sub.textContent=user.email;
+    }
+  });
 
   const first=new Date(year,month,1).getDay();
   const dim=new Date(year,month+1,0).getDate();
@@ -700,22 +911,22 @@ async function loadDay(ds){
   const list=await DB.byDate(ds);
   const el=document.getElementById('dayList');
   if(!list.length){
-    el.innerHTML=`<div class="empty"><div class="ei">📋</div><h3>No inspections logged</h3><p>Tap + to add one for this date</p></div>`;
+    el.innerHTML=`<div class="empty"><div class="ei">ð</div><h3>No inspections logged</h3><p>Tap + to add one for this date</p></div>`;
     return;
   }
   el.innerHTML=list.map(ins=>`
-    <div class="ins-card" onclick="viewIns('${ins.id}')">
-      <h3>${ins.permitNumber||'No Permit #'}${ins.permittee?' – '+ins.permittee:''}</h3>
+    <div class="igs-card" onclick="viewIns('${ins.id}')">
+      <h3>${ins.permitNumber||'No Permit #'}${ins.permittee?' â '+ins.permittee:''}</h3>
       <div class="meta">
-        <span>📍 ${ins.location||'No location'}</span>
-        ${ins.weather?`<span>🌤 ${ins.weather}${ins.tempHigh?' '+ins.tempHigh+'°/'+ins.tempLow+'°':''}</span>`:''}
+        <span>ð ${ins.location||'No location'}</span>
+        ${ins.weather?`<span>ð¤ ${ins.weather}${ins.tempHigh?' '+ins.tempHigh+'Â°/'+ins.tempLow+'Â°':''}</span>`:''}
       </div>
-      ${ins.photos&&ins.photos.length?`<span class="pcnt">📷 ${ins.photos.length} photo${ins.photos.length!==1?'s':''}</span>`:''}
+      ${ins.photos&&ins.photos.length?`<span class="pcnt">ð· ${ins.photos.length} photo${ins.photos.length!==1?'s':''}</span>`:''}
     </div>`).join('');
 }
 
 /* =============================================
-   FORM — NEW / EDIT
+   FORM â NEW / EDIT
 ============================================= */
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -730,7 +941,6 @@ async function newIns(){
   document.getElementById('btnDel').style.display='none';
   renderPhotos();
   showScreen('form');
-  // Check for unsaved draft
   await checkDraft();
 }
 
@@ -746,9 +956,9 @@ function renderPhotos(){
   let h=S.photos.map((p,i)=>`
     <div class="ph-wrap">
       <img class="ph-thumb" src="${p.dataUrl}" onclick="openModal('${p.dataUrl.replace(/'/g,'&#39;')}')">
-      <button class="ph-del" onclick="rmPhoto(${i})">✕</button>
+      <button class="ph-del" onclick="rmPhoto(${i})">â</button>
     </div>`).join('');
-  h+=`<button class="ph-add" onclick="addPhoto()"><span class="pi">📷</span><span>Add</span></button>`;
+  h+=`<button class="ph-add" onclick="addPhoto()"><span class="pi">ð·</span><span>Add</span></button>`;
   g.innerHTML=h;
 }
 
@@ -782,15 +992,10 @@ function rmPhoto(i){S.photos.splice(i,1);renderPhotos()}
 ============================================= */
 function triggerOCR(){document.getElementById('ocrInput').click()}
 
-/* Pre-process image for better OCR accuracy:
-   - Scale up small images
-   - Convert to grayscale
-   - Boost contrast */
 function preprocessForOCR(dataUrl){
   return new Promise(resolve=>{
     const img=new Image();
     img.onload=()=>{
-      // Scale up if small — Tesseract works best at ~300 DPI equivalent
       const maxDim=2400;
       const scale=Math.min(3,Math.max(1,maxDim/Math.max(img.width,img.height)));
       const w=Math.round(img.width*scale);
@@ -798,13 +1003,11 @@ function preprocessForOCR(dataUrl){
       const c=document.createElement('canvas');
       c.width=w;c.height=h;
       const ctx=c.getContext('2d');
-      // White background (helps with transparent PNGs)
       ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
       ctx.drawImage(img,0,0,w,h);
-      // Grayscale + contrast boost
       const id=ctx.getImageData(0,0,w,h);
       const d=id.data;
-      const contrast=1.6; // increase for sharper text
+      const contrast=1.6;
       const factor=(259*(contrast*255+255))/(255*(259-contrast*255));
       for(let i=0;i<d.length;i+=4){
         const gray=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
@@ -821,112 +1024,91 @@ function preprocessForOCR(dataUrl){
 async function onOCRFile(e){
   const file=e.target.files[0];if(!file)return;e.target.value='';
   if(file.type==='application/pdf'){
-    toast('PDF attached – fill fields manually or use a photo');return;
+    toast('PDF attached â fill fields manually or use a photo');return;
   }
-  loading('📸 Preparing image…');
+  loading('ð¸ Preparing imageâ¦');
   const r=new FileReader();
   r.onload=async ev=>{
     const rawDataUrl=ev.target.result;
     try{
-      // Step 1: preprocess
-      document.getElementById('ovTxt').textContent='🔧 Enhancing image for OCR…';
+      document.getElementById('ovTxt').textContent='ð§ Enhancing image for OCRâ¦';
       const processed=await preprocessForOCR(rawDataUrl);
-
-      // Step 2: run Tesseract with optimized settings
-      document.getElementById('ovTxt').textContent='📖 Reading permit text…';
+      document.getElementById('ovTxt').textContent='ð Reading permit textâ¦';
       const worker=await Tesseract.createWorker('eng',1,{
         logger:m=>{
           if(m.status==='recognizing text')
             document.getElementById('ovTxt').textContent=
-              `📖 Reading permit: ${Math.round(m.progress*100)}%`;
+              `ð Reading permit: ${Math.round(m.progress*100)}%`;
         }
       });
       await worker.setParameters({
-        tessedit_pageseg_mode:'6',   // single uniform block — best for forms
-        tessedit_char_whitelist:'',  // allow all characters
+        tessedit_pageseg_mode:'6',
+        tessedit_char_whitelist:'',
         preserve_interword_spaces:'1'
       });
       const result=await worker.recognize(processed);
       await worker.terminate();
-
       const rawText=result.data.text;
       const filled=parsePermit(rawText);
-
-      // Step 3: attach original photo
       compress(rawDataUrl,1280,.82,d=>{S.photos.push({id:uid(),dataUrl:d});renderPhotos()});
-
       doneLoad();
       showOCRReview(rawText,filled);
-
     }catch(err){
       doneLoad();
-      toast('OCR failed — try a clearer photo or fill in manually');
+      toast('OCR failed â try a clearer photo or fill in manually');
       console.error('OCR error:',err);
     }
   };
   r.readAsDataURL(file);
 }
 
-/* ── CA Encroachment Permit Work Types ──────────────────────────────
-   Built from real Santa Clara permit (EP25-0617) and common CA city formats.
-   Each entry: [canonical label, ...alternate spellings OCR might produce]
-   ----------------------------------------------------------------- */
-const PERMIT_WORK_TYPES = [
-  // Santa Clara standard checkbox items
+const PERMIT_WORK_TYPES=[
   ['Cleanout'],
-  ['Electric', 'Electrical'],
-  ['Pothole', 'Pot Hole', 'Potholing'],
-  ['Storm Drain Lateral', 'Storm Drain Lat'],
-  ['Communication', 'Communications'],
-  ['Gas', 'Gas Line', 'Gas Main'],
-  ['Sanitary Sewer Lateral', 'San Sewer Lateral', 'SS Lateral'],
-  ['Storm Drain Main', 'Storm Drain'],
-  ['Curb & Gutter', 'Curb and Gutter', 'Curb &amp; Gutter', 'Curb/Gutter'],
-  ['Manhole', 'Man Hole'],
-  ['Sanitary Sewer Main', 'San Sewer Main', 'Sewer Main'],
-  ['Water', 'Water Main', 'Water Line'],
-  ['Curb Ramp', 'Curb Cut'],
+  ['Electric','Electrical'],
+  ['Pothole','Pot Hole','Potholing'],
+  ['Storm Drain Lateral','Storm Drain Lat'],
+  ['Communication','Communications'],
+  ['Gas','Gas Line','Gas Main'],
+  ['Sanitary Sewer Lateral','San Sewer Lateral','SS Lateral'],
+  ['Storm Drain Main','Storm Drain'],
+  ['Curb & Gutter','Curb and Gutter','Curb &amp; Gutter','Curb/Gutter'],
+  ['Manhole','Man Hole'],
+  ['Sanitary Sewer Main','San Sewer Main','Sewer Main'],
+  ['Water','Water Main','Water Line'],
+  ['Curb Ramp','Curb Cut'],
   ['Monitoring Well'],
   ['Sidewalk'],
   ['Other'],
-  ['Driveway', 'Driveway Approach'],
-  ['Pavement', 'Pavement Repair', 'Pavement Replacement'],
-  ['Soil Boring', 'Boring'],
-  // Other CA city permit types
-  ['Excavation', 'Excavate', 'Trench', 'Trenching'],
-  ['Underground Utilities', 'Underground Util'],
-  ['Street Light', 'Streetlight', 'Street Lighting'],
-  ['Traffic Signal', 'Traffic Control'],
+  ['Driveway','Driveway Approach'],
+  ['Pavement','Pavement Repair','Pavement Replacement'],
+  ['Soil Boring','Boring'],
+  ['Excavation','Excavate','Trench','Trenching'],
+  ['Underground Utilities','Underground Util'],
+  ['Street Light','Streetlight','Street Lighting'],
+  ['Traffic Signal','Traffic Control'],
   ['Retaining Wall'],
   ['Grading'],
-  ['Bore', 'Directional Bore', 'HDD'],
-  ['Survey Monument', 'Survey'],
-  ['Landscaping', 'Landscape'],
+  ['Bore','Directional Bore','HDD'],
+  ['Survey Monument','Survey'],
+  ['Landscaping','Landscape'],
   ['Lane Closure'],
-  ['Slurry Seal', 'Slurry'],
-  ['Overlay', 'AC Overlay'],
+  ['Slurry Seal','Slurry'],
+  ['Overlay','AC Overlay'],
 ];
 
-/* Look for an X marker within a short window around each known work type label.
-   OCR reads the checkbox grid in reading order, so a checked Gas box becomes
-   something like "Communication X Gas" or "x Gas" or "Gas X" in the raw text. */
 function extractCheckedWorkTypes(txt){
   const checked=[];
-  // Normalize OCR noise: collapse whitespace, standardize common misreads
   const norm=txt.replace(/\s+/g,' ');
-
-  for(const [canonical,...alts] of PERMIT_WORK_TYPES){
+  for(const[canonical,...alts]of PERMIT_WORK_TYPES){
     const labels=[canonical,...alts];
     let found=false;
     for(const label of labels){
-      if(found) break;
-      const esc=label.replace(/[.*+?^${}()|[\]\\&]/g,'\\$&');
-      // X appears 0–6 chars BEFORE the label
-      const before=new RegExp(`[Xx✓✗*■☑]\\s{0,6}${esc}`,'i');
-      // X appears 0–6 chars AFTER the label
-      const after=new RegExp(`${esc}\\s{0,6}[Xx✓✗*■☑]`,'i');
+      if(found)break;
+      const esc=label.replace(/[.*+?^${}()|[\\]\\&]/g,'\\$&');
+      const before=new RegExp(`[XxÂââ*â â]\\s{0,6}${esc}`,'i');
+      const after=new RegExp(`${esc}\\s{0,6}[XxÂââ*¸ â]`,'i);
       if(before.test(norm)||after.test(norm)){
-        if(!checked.includes(canonical)) checked.push(canonical);
+        if(!checked.includes(canonical))checked.push(canonical);
         found=true;
       }
     }
@@ -934,35 +1116,29 @@ function extractCheckedWorkTypes(txt){
   return checked;
 }
 
-/* Main permit parser — tuned to real CA city encroachment permit layout */
 function parsePermit(txt){
   const filled=[];
-  // Normalize for matching (keep original for field values)
   const n=txt.replace(/\r/g,'');
 
-  // ── Permit Number ──
-  // Santa Clara labels it "PERMIT NO." with value on same line
   const pnPatterns=[
-    /PERMIT\s+NO\.?\s*[:\-]?\s*([\w\-\/]{3,25})/i,          // PERMIT NO. EP25-0617
-    /(?:permit\s*(?:no\.?|num(?:ber)?|#)\s*[:\-#]?\s*)([\w\-\/]{3,25})/i,
-    /\b(EP[-\s]?\d{2,4}[-\s]\d{2,6})\b/i,                   // EP25-0617 format
+    /PERMIT\s+NO\.?\s*[:\-]?\s*([\w\-\/]{3,25})/i,{
+    /(?:permit\s*(?:no\.?|num(?:ber)?|#)\s*[:\-#]?\s*)([\w\-\/]{3,25})/i,{
+    /\b(EP[-\s]?\d{2,4}[-\s]\d{2,6})\b/i,
     /\b(EP[-\s]?\d{4,})\b/i,
     /(?:encroachment\s*permit\s*(?:no\.?|#)?\s*[:\-]?\s*)([\w\-\/]{3,25})/i,
-    /\b([A-Z]{1,4}[-\/]\d{2,4}[-\/]\d{2,6})\b/,             // XX-YYYY-NNNN formats
+    /\b([A-Z]{1,4}[-\/]\d{2,4}[-\/]\d{2,6})\b/,
   ];
   for(const p of pnPatterns){
     const m=n.match(p);
     if(m){const v=(m[1]||m[0]).trim();
-      // Skip obvious non-permit values
       if(v.length>=3&&!/^(N\/A|NA|YES|NO|TEL|FAX)$/i.test(v)){
         const f=document.getElementById('fp-num');if(!f.value){f.value=v.substring(0,40);filled.push('Permit #');break;}
       }
     }
   }
 
-  // ── Permittee ──
   const pePatterns=[
-    /PERMITTEE\s*[:\-]?\s*([^\n]{3,80})/i,                   // PERMITTEE: label (exact)
+    /PERMITTEE\s*[:\-]?\s*([^\n]{3,80})/i,
     /(?:applicant|issued\s*to|permit\s*holder|owner|company\s*name)\s*[:\-]?\s*([^\n]{3,80})/i,
     /(?:name\s*of\s*(?:applicant|permittee|owner))\s*[:\-]?\s*([^\n]{3,80})/i,
   ];
@@ -975,9 +1151,8 @@ function parsePermit(txt){
     }
   }
 
-  // ── Location ──
   const locPatterns=[
-    /LOCATION\s+OF\s+WORK\s*[:\-]?\s*([^\n]{3,150})/i,      // Santa Clara exact label
+    /LOCATION\s+OF\s+WORK\s*[:\-]?\s*([^\n]{3,150})/i,
     /(?:work\s*location|job\s*(?:site|address)|project\s*(?:location|address)|site\s*(?:address|location)|address\s*of\s*work)\s*[:\-]?\s*([^\n]{5,150})/i,
     /(?:^|[\n])(?:location|address|site)\s*[:\-]\s*([^\n]{5,150})/im,
     /\d+\s+[A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*\s+(?:Street|St\.?|Avenue|Ave\.?|Av\.?|Boulevard|Blvd\.?|Drive|Dr\.?|Road|Rd\.?|Lane|Ln\.?|Way|Court|Ct\.?|Place|Pl\.?|Highway|Hwy\.?|Parkway|Pkwy\.?)/i,
@@ -991,14 +1166,11 @@ function parsePermit(txt){
     }
   }
 
-  // ── Proposed Work — checkbox grid detection ──────────────────────
-  // Strategy 1: match known work type labels with adjacent X marker
   const checkedTypes=extractCheckedWorkTypes(n);
   if(checkedTypes.length>0){
     const f=document.getElementById('fp-work');
     if(!f.value){f.value=checkedTypes.join(', ');filled.push('Proposed Work');}
-  } else {
-    // Strategy 2: text-block fallback (for permits with written descriptions)
+  }else{
     const workPatterns=[
       /(?:proposed\s*work|work\s*(?:to\s*be\s*performed|description)|description\s*of\s*(?:work|activity)|scope\s*of\s*work|nature\s*of\s*work|type\s*of\s*work|activity\s*description|purpose\s*of\s*work)\s*[:\-]?\s*([\s\S]{10,500}?)(?:\n{2,}|(?=[A-Z]{3,}[^a-z]*:)|$)/i,
       /(?:work\s*authorized|authorized\s*work)\s*[:\-]?\s*([\s\S]{10,400}?)(?:\n{2,}|$)/i,
@@ -1012,21 +1184,20 @@ function parsePermit(txt){
   return filled;
 }
 
-/* Show OCR review panel with what was extracted */
 function showOCRReview(rawText,filled){
   document.getElementById('ocrRawText').textContent=rawText;
   const summary=document.getElementById('ocrSummary');
   if(filled.length===0){
-    summary.innerHTML='<span style="color:var(--red)">⚠️ No fields auto-filled — check the fields below and enter manually, or try a clearer photo.</span>';
-  } else {
-    summary.innerHTML=`<span style="color:var(--green)">✅ Auto-filled: <strong>${filled.join(', ')}</strong></span>${filled.length<4?' — check remaining fields below':''}`;
+    summary.innerHTML='<span style="color:var(--red)">â ï¸ No fields auto-filled â check the fields below and enter manually, or try a clearer photo.</span>';
+  }else{
+    summary.innerHTML=`<span style="color:var(--green)">â Auto-filled: <strong>${filled.join(', ')}</strong></span>${filled.length<4?' â check remaining fields below':''}`;
   }
   document.getElementById('ocrReview').classList.add('on');
 }
 function closeOCRReview(){document.getElementById('ocrReview').classList.remove('on')}
 
 /* =============================================
-   WEATHER  (Open-Meteo — free, no API key)
+   WEATHER  (Open-Meteo â free, no API key)
 ============================================= */
 const WMO={
   0:'Clear Sky',1:'Mainly Clear',2:'Partly Cloudy',3:'Overcast',
@@ -1042,7 +1213,7 @@ const WMO={
 };
 
 async function getWeather(){
-  loading('🌐 Fetching weather…');
+  loading('ð Fetching weatherâ¦');
   try{
     const pos=await new Promise((ok,fail)=>
       navigator.geolocation.getCurrentPosition(ok,fail,{timeout:8000}));
@@ -1064,11 +1235,11 @@ async function getWeather(){
     document.getElementById('fp-wx').value=cond;
     document.getElementById('fp-hi').value=hi;
     document.getElementById('fp-lo').value=lo;
-    doneLoad();toast(`🌤 ${cond} | ${hi}°F / ${lo}°F`);
+    doneLoad();toast(`ð¤ ${cond} | ${hi}Â°F / ${lo}Â°F`);
   }catch(err){
     doneLoad();
-    if(err&&err.code===1)toast('Location denied — enter weather manually');
-    else toast('Weather unavailable — enter manually');
+    if(err&&err.code===1)toast('Location denied â enter weather manually');
+    else toast('Weather unavailable â enter manually');
     console.error('Weather:',err);
   }
 }
@@ -1081,7 +1252,7 @@ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 function toggleRec(){S.recOn?stopRec():startRec()}
 
 function startRec(){
-  if(!SR){toast('Speech recognition not supported — try Chrome or Safari');return}
+  if(!SR){toast('Speech recognition not supported â try Chrome or Safari');return}
   const notes=document.getElementById('fp-notes');
   const btn=document.getElementById('btnRec');
   const ind=document.getElementById('recInd');
@@ -1098,9 +1269,9 @@ function startRec(){
     notes.scrollTop=notes.scrollHeight;
   };
   S.rec.onerror=e=>{if(e.error!=='no-speech'){stopRec();toast('Recording stopped')}};
-  S.rec.onend=()=>{if(S.recOn)S.rec.start()};// auto-restart
+  S.rec.onend=()=>{if(S.recOn)S.rec.start()};
   S.rec.start();S.recOn=true;
-  btn.textContent='⏹  Stop Recording';btn.classList.replace('go','stop');
+  btn.textContent='â¹  Stop Recording';btn.classList.replace('go','stop');
   ind.classList.add('on');
 }
 
@@ -1108,7 +1279,7 @@ function stopRec(){
   if(S.rec){S.recOn=false;S.rec.stop();S.rec=null;}
   const btn=document.getElementById('btnRec');
   const ind=document.getElementById('recInd');
-  if(btn){btn.textContent='🎤\u00A0 Start Dictating';btn.classList.replace('stop','go');}
+  if(btn){btn.textContent='ð¤\u00A0 Start Dictating';btn.classList.replace('stop','go');}
   if(ind)ind.classList.remove('on');
 }
 
@@ -1133,43 +1304,50 @@ async function saveIns(){
     materialDelivery:document.getElementById('fp-mat').value.trim(),
     laborForce:document.getElementById('fp-lab').value.trim(),
     notes:document.getElementById('fp-notes').value.trim(),
-    photos:[...S.photos],
-    updatedAt:new Date().toISOString()
+    photos:[...S.photos]
   };
-  if(S.curId){const ex=await DB.get(S.curId);if(ex)ins.createdAt=ex.createdAt;}
-  if(!ins.createdAt)ins.createdAt=ins.updatedAt;
-  loading('Saving…');
-  await DB.save(ins);
-  await clearDraft();
-  S.activeDates=await DB.activeDates();
-  doneLoad();toast('✅ Saved');
-  goHome();
+  loading('Savingâ¦');
+  try{
+    await DB.save(ins);
+    await clearDraft();
+    S.activeDates=await DB.activeDates();
+    doneLoad();toast('â Saved');
+    goHome();
+  }catch(e){
+    doneLoad();
+    toast('â Save failed â check connection');
+    console.error('Save error:',e);
+  }
 }
 
 async function delIns(){
   if(!S.curId)return;
   if(!confirm('Delete this inspection?'))return;
-  await DB.del(S.curId);
-  await clearDraft();
-  S.activeDates=await DB.activeDates();
-  toast('Deleted');goHome();
+  loading('Deletingâ¦');
+  try{
+    await DB.del(S.curId);
+    await clearDraft();
+    S.activeDates=await DB.activeDates();
+    doneLoad();toast('Deleted');goHome();
+  }catch(e){
+    doneLoad();toast('â Delete failed');console.error(e);
+  }
 }
 
 /* =============================================
-   AUTO-SAVE DRAFT
+   AUTO-SAVE DRAFT  (local IndexedDB only)
 ============================================= */
 const DRAFT_ID='__draft__';
 let _autoSaveTimer=null;
 let _lastDraftSave=null;
 
 function formHasContent(){
-  return ['fp-num','fp-per','fp-con','fp-sub','fp-loc','fp-work','fp-notes','fp-site','fp-mat','fp-lab']
+  return['fp-num','fp-per','fp-con','fp-sub','fp-loc','fp-work','fp-notes','fp-site','fp-mat','fp-lab']
     .some(id=>{const el=document.getElementById(id);return el&&el.value.trim();})
-    || S.photos.length>0;
+    ||S.photos.length>0;
 }
 
 async function saveDraft(){
-  // Only save if on the form screen and there's something to save
   if(!document.getElementById('s-form').classList.contains('active'))return;
   if(!formHasContent())return;
   const draft={
@@ -1192,13 +1370,15 @@ async function saveDraft(){
     photos:[...S.photos],
     savedAt:new Date().toISOString()
   };
-  await DB.save(draft);
-  _lastDraftSave=new Date();
-  updateDraftBadge();
+  try{
+    await DraftDB.save(draft);
+    _lastDraftSave=new Date();
+    updateDraftBadge();
+  }catch(e){console.warn('Draft save failed:',e);}
 }
 
 async function clearDraft(){
-  try{await DB.del(DRAFT_ID);}catch(e){}
+  try{await DraftDB.del(DRAFT_ID);}catch(e){}
   _lastDraftSave=null;
   updateDraftBadge();
 }
@@ -1209,46 +1389,45 @@ function updateDraftBadge(){
   if(_lastDraftSave){
     badge.textContent='Draft saved '+_lastDraftSave.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     badge.style.display='block';
-  } else {
+  }else{
     badge.style.display='none';
   }
 }
 
 async function checkDraft(){
-  const draft=await DB.get(DRAFT_ID);
-  if(!draft||!draft._isDraft)return;
-  // Only restore if draft has content
-  const hasContent=draft.permitNumber||draft.location||draft.notes||
-                   (draft.photos&&draft.photos.length>0);
-  if(!hasContent)return;
-
-  // Restore draft silently
-  S.selDate=draft.date||S.selDate;
-  document.getElementById('formDateLbl').textContent=fmtDisplay(S.selDate);
-  document.getElementById('fp-num').value=draft.permitNumber||'';
-  document.getElementById('fp-per').value=draft.permittee||'';
-  document.getElementById('fp-con').value=draft.contractor||'';
-  document.getElementById('fp-sub').value=draft.subContractor||'';
-  document.getElementById('fp-loc').value=draft.location||'';
-  document.getElementById('fp-work').value=draft.proposedWork||'';
-  document.getElementById('fp-wx').value=draft.weather||'';
-  document.getElementById('fp-hi').value=draft.tempHigh||'';
-  document.getElementById('fp-lo').value=draft.tempLow||'';
-  document.getElementById('fp-site').value=draft.siteCondition||'';
-  document.getElementById('fp-mat').value=draft.materialDelivery||'';
-  document.getElementById('fp-lab').value=draft.laborForce||'';
-  document.getElementById('fp-notes').value=draft.notes||'';
-  S.photos=draft.photos?[...draft.photos]:[];
-  renderPhotos();
-  _lastDraftSave=new Date(draft.savedAt);
-  updateDraftBadge();
-  const savedTime=new Date(draft.savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  toast(`♻️ Draft restored from ${savedTime} — keep going!`,4000);
+  try{
+    const draft=await DraftDB.get(DRAFT_ID);
+    if(!draft||!draft._isDraft)return;
+    const hasContent=draft.permitNumber||draft.location||draft.notes||
+                     (draft.photos&&draft.photos.length>0);
+    if(!hasContent)return;
+    S.selDate=draft.date||S.selDate;
+    document.getElementById('formDateLbl').textContent=fmtDisplay(S.selDate);
+    document.getElementById('fp-num').value=draft.permitNumber||'';
+    document.getElementById('fp-per').value=draft.permittee||'';
+    document.getElementById('fp-con').value=draft.contractor||'';
+    document.getElementById('fp-sub').value=draft.subContractor||'';
+    document.getElementById('fp-loc').value=draft.location||'';
+    document.getElementById('fp-work').value=draft.proposedWork||'';
+    document.getElementById('fp-wx').value=draft.weather||'';
+    document.getElementById('fp-hi').value=draft.tempHigh||'';
+    document.getElementById('fp-lo').value=draft.tempLow||'';
+    document.getElementById('fp-site').value=draft.siteCondition||'';
+    document.getElementById('fp-mat').value=draft.materialDelivery||'';
+    document.getElementById('fp-lab').value=draft.laborForce||'';
+    document.getElementById('fp-notes').value=draft.notes||'';
+    S.photos=draft.photos?[...draft.photos]:[];
+    renderPhotos();
+    _lastDraftSave=new Date(draft.savedAt);
+    updateDraftBadge();
+    const savedTime=new Date(draft.savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    toast(`â»ï¸ Draft restored from ${savedTime} â keep going!`,4000);
+  }catch(e){console.warn('checkDraft failed:',e);}
 }
 
 function startAutoSave(){
   if(_autoSaveTimer)clearInterval(_autoSaveTimer);
-  _autoSaveTimer=setInterval(saveDraft,30000); // every 30 seconds
+  _autoSaveTimer=setInterval(saveDraft,30000);
 }
 
 function stopAutoSave(){
@@ -1259,41 +1438,44 @@ function stopAutoSave(){
    DETAIL VIEW
 ============================================= */
 async function viewIns(id){
-  const ins=await DB.get(id);if(!ins)return;
+  loading('Loadingâ¦');
+  const ins=await DB.get(id);
+  doneLoad();
+  if(!ins)return;
   S.curId=id;
   document.getElementById('detTitle').textContent=ins.permitNumber||fmtDisplay(ins.date).split(',')[0];
   const photos=ins.photos&&ins.photos.length
-    ?`<div class="det-sec"><h3>📷 Photos (${ins.photos.length})</h3>
+    ?`<div class="det-sec"><h3>ð· Photos (${ins.photos.length})</h3>
        <div class="det-photos">${ins.photos.map((p,i)=>`
          <div class="det-ph-wrap">
            <img src="${p.dataUrl}" onclick="openModal('${p.dataUrl.replace(/'/g,'&#39;')}')">
-           <button class="det-ph-share" onclick="sharePhoto('${p.dataUrl.replace(/'/g,'&#39;')}','inspection-photo-${i+1}.jpg')" title="Share">⬆️</button>
+           <button class="det-ph-share" onclick="sharePhoto('${p.dataUrl.replace(/'/g,'&#39;')}','inspection-photo-${i+1}.jpg')" title="Share">â¬ï¸</button>
          </div>`).join('')}</div></div>`:'';
   document.getElementById('detBody').innerHTML=`
     <div class="det-sec">
-      <h3>📄 Permit Information</h3>
+      <h3>ð Permit Information</h3>
       <div class="det-grid">
         <div class="df"><label>Date</label><div class="dv">${fmtDisplay(ins.date)}</div></div>
-        <div class="df"><label>Permit #</label><div class="dv">${ins.permitNumber||'—'}</div></div>
-        <div class="df"><label>Permittee</label><div class="dv">${ins.permittee||'—'}</div></div>
-        <div class="df"><label>Contractor</label><div class="dv">${ins.contractor||'—'}</div></div>
-        <div class="df"><label>Sub-Contractor</label><div class="dv">${ins.subContractor||'—'}</div></div>
+        <div class="df"><label>Permit #</label><div class="dv">${ins.permitNumber||'â'}</div></div>
+        <div class="df"><label>Permittee</label><div class="dv">${ins.permittee||'â'}</div></div>
+        <div class="df"><label>Contractor</label><div class="dv">${ins.contractor||'â'}</div></div>
+        <div class="df"><label>Sub-Contractor</label><div class="dv">${ins.subContractor||'â'}</div></div>
       </div>
-      <div class="df" style="margin-top:10px"><label>Location</label><div class="dv">${ins.location||'—'}</div></div>
-      <div class="df" style="margin-top:10px"><label>Proposed Work</label><div class="dv">${ins.proposedWork||'—'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Location</label><div class="dv">${ins.location||'â'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Proposed Work</label><div class="dv">${ins.proposedWork||'â'}</div></div>
     </div>
     <div class="det-sec">
-      <h3>🌤 Field Conditions</h3>
+      <h3>ð¤ Field Conditions</h3>
       <div class="det-grid">
-        <div class="df"><label>Weather</label><div class="dv">${ins.weather||'—'}</div></div>
-        <div class="df"><label>Temp</label><div class="dv">${ins.tempHigh?ins.tempHigh+'°F / '+ins.tempLow+'°F':'—'}</div></div>
+        <div class="df"><label>Weather</label><div class="dv">${ins.weather||'â'}</div></div>
+        <div class="df"><label>Temp</label><div class="dv">${ins.tempHigh?ins.tempHigh+'Â°F / '+ins.tempLow+'Â°F':'â'}</div></div>
       </div>
-      <div class="df" style="margin-top:10px"><label>Site Condition</label><div class="dv">${ins.siteCondition||'—'}</div></div>
-      <div class="df" style="margin-top:10px"><label>Material Delivery</label><div class="dv">${ins.materialDelivery||'—'}</div></div>
-      <div class="df" style="margin-top:10px"><label>Labor Force</label><div class="dv">${ins.laborForce||'—'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Site Condition</label><div class="dv">${ins.siteCondition||'â'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Material Delivery</label><div class="dv">${ins.materialDelivery||'â'}</div></div>
+      <div class="df" style="margin-top:10px"><label>Labor Force</label><div class="dv">${ins.laborForce||'â'}</div></div>
     </div>
     ${photos}
-    ${ins.notes?`<div class="det-sec"><h3>📝 Inspection Notes</h3><div class="dv" style="font-size:15px;line-height:1.65">${ins.notes}</div></div>`:''}
+    ${ins.notes?`<div class="det-sec"><h3>ð Inspection Notes</h3><div class="dv" style="font-size:15px;line-height:1.65">${ins.notes}</div></div>`:''}
   `;
   showScreen('det');
 }
@@ -1304,7 +1486,10 @@ function editCurrent(){
 }
 
 async function loadToForm(id){
-  const ins=await DB.get(id);if(!ins)return;
+  loading('Loadingâ¦');
+  const ins=await DB.get(id);
+  doneLoad();
+  if(!ins)return;
   S.curId=id;S.selDate=ins.date;
   S.photos=ins.photos?[...ins.photos]:[];
   document.getElementById('formTitle').textContent='Edit Inspection';
@@ -1330,15 +1515,18 @@ async function loadToForm(id){
    COPY TO CLIPBOARD (eBuilder paste)
 ============================================= */
 async function copyReport(){
-  const ins=await DB.get(S.curId);if(!ins)return;
+  loading('Preparing reportâ¦');
+  const ins=await DB.get(S.curId);
+  doneLoad();
+  if(!ins)return;
   const photoNote=ins.photos&&ins.photos.length
     ?`Photos: ${ins.photos.length} photo${ins.photos.length!==1?'s':''} attached (share separately below)`
     :'Photos: None';
   const txt=[
-    '─── FIELD INSPECTION REPORT ───',
+    'âââ FIELD INSPECTION REPORT âââ',
     `Date:              ${fmtDisplay(ins.date)}`,
     '',
-    '─── PERMIT INFORMATION ───',
+    'âââ PERMIT INFORMATION âââ',
     `Encroachment Permit #:  ${ins.permitNumber||'N/A'}`,
     `Permittee:         ${ins.permittee||'N/A'}`,
     `Contractor:        ${ins.contractor||'N/A'}`,
@@ -1346,14 +1534,14 @@ async function copyReport(){
     `Location:          ${ins.location||'N/A'}`,
     `Proposed Work:     ${ins.proposedWork||'N/A'}`,
     '',
-    '─── FIELD CONDITIONS ───',
+    'âââ FIELD CONDITIONS âââ',
     `Weather:           ${ins.weather||'N/A'}`,
-    `Temperature:       ${ins.tempHigh?'High '+ins.tempHigh+'°F  /  Low '+ins.tempLow+'°F':'N/A'}`,
+    `Temperature:       ${ins.tempHigh?'High '+ins.tempHigh+'Â°F  /  Low '+ins.tempLow+'Â°F':'N/A'}`,
     `Site Condition:    ${ins.siteCondition||'N/A'}`,
     `Material Delivery: ${ins.materialDelivery||'N/A'}`,
     `Labor Force:       ${ins.laborForce||'N/A'}`,
     '',
-    '─── INSPECTION NOTES ───',
+    'âââ INSPECTION NOTES âââ',
     ins.notes||'N/A',
     '',
     photoNote,
@@ -1367,11 +1555,10 @@ async function copyReport(){
     document.body.appendChild(ta);ta.select();document.execCommand('copy');
     document.body.removeChild(ta);
   }
-  // Show photo share prompt if there are photos
   if(ins.photos&&ins.photos.length){
     showPhotoPrompt(ins.photos.length);
-  } else {
-    toast('📋 Report copied — paste into eBuilder');
+  }else{
+    toast('ð Report copied â paste into eBuilder');
   }
 }
 
@@ -1396,28 +1583,47 @@ function goHome(){
 /* =============================================
    INIT
 ============================================= */
-async function init(){
+async function appInit(){
   try{
-    await DB.init();
     S.activeDates=await DB.activeDates();
     renderCal();
     await loadDay(S.selDate);
     if('serviceWorker' in navigator)
       navigator.serviceWorker.register('sw.js').catch(()=>{});
-    // Start auto-save interval
     startAutoSave();
-    // Save draft immediately when phone goes to background / screen locks
     document.addEventListener('visibilitychange',()=>{
-      if(document.hidden) saveDraft();
+      if(document.hidden)saveDraft();
     });
-    // Also save when user navigates away
-    window.addEventListener('pagehide', saveDraft);
-    window.addEventListener('beforeunload', saveDraft);
+    window.addEventListener('pagehide',saveDraft);
+    window.addEventListener('beforeunload',saveDraft);
   }catch(e){
-    console.error('Init error:',e);
+    console.error('appInit error:',e);
     renderCal();
   }
 }
+
+async function init(){
+  // Init local draft storage
+  try{await DraftDB.init();}catch(e){console.warn('DraftDB init:',e);}
+
+  // Check if already signed in
+  loading('Loadingâ¦');
+  try{
+    const{data:{session}}=await supabase.auth.getSession();
+    doneLoad();
+    if(session){
+      showScreen('cal');
+      await appInit();
+    }else{
+      showScreen('login');
+    }
+  }catch(e){
+    doneLoad();
+    showScreen('login');
+    console.error('Session check failed:',e);
+  }
+}
+
 init();
 </script>
 </body>
